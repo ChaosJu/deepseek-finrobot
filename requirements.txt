@@ -1,0 +1,39 @@
+# 核心依赖
+pyautogen>=0.2.19
+ipython
+huggingface_hub
+matplotlib
+
+# 中国金融数据库
+akshare>=1.10.0  # 中国金融数据接口
+tushare  # 中国金融数据接口
+
+# 数据处理
+numpy
+pandas
+pyPDF2
+reportlab
+
+# 网页解析
+beautifulsoup4  # 网页解析
+
+# 图表和可视化
+mplfinance
+plotly
+
+# 包装
+setuptools>=41.4.0
+wheel>=0.33.6
+
+# 其他工具
+aiohttp==3.8.5
+langchain==0.1.20
+nltk==3.8.1
+ratelimit==2.2.1
+Requests==2.31.0
+scikit_learn==1.5.0
+starlette==0.37.2
+tenacity==8.3.0
+tqdm==4.66.1
+typing_extensions==4.9.0
+unstructured==0.8.1 
