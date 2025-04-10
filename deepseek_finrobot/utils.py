@@ -13,6 +13,26 @@ import time
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Union, Callable
 
+# 导入 DeepSeek API 工具
+try:
+    from .openai_adapter import get_llm_config_for_autogen
+except ImportError:
+    # 如果导入失败，创建一个默认的适配函数
+    def get_llm_config_for_autogen(**kwargs):
+        """当无法导入adapter模块时的替代函数"""
+        config = kwargs.copy()
+        # 确保有config_list字段
+        if "config_list" in config:
+            new_config_list = []
+            for cfg in config["config_list"]:
+                new_cfg = cfg.copy()
+                # 将api_base转换为base_url (如果存在)
+                if "api_base" in new_cfg:
+                    new_cfg["base_url"] = new_cfg.pop("api_base")
+                new_config_list.append(new_cfg)
+            config["config_list"] = new_config_list
+        return config
+
 def get_current_date() -> str:
     """
     获取当前日期，格式为YYYY-MM-DD
@@ -96,6 +116,44 @@ def load_api_keys(config_path: Optional[str] = None) -> Dict[str, str]:
     except Exception as e:
         print(f"读取配置文件出错: {str(e)}")
         return {}
+
+def get_deepseek_config_from_api_keys(config_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    从config_api_keys.json文件生成DeepSeek API配置列表
+    
+    Args:
+        config_path: 配置文件路径，如果为None则使用默认路径
+        
+    Returns:
+        DeepSeek API配置列表
+    """
+    # 加载API密钥
+    api_keys = load_api_keys(config_path)
+    
+    # 检查是否有DeepSeek API密钥
+    if "DEEPSEEK_API_KEY" not in api_keys or not api_keys["DEEPSEEK_API_KEY"]:
+        raise ValueError("未找到有效的DeepSeek API密钥，请检查config_api_keys.json文件")
+    
+    # 创建配置列表
+    config_list = [{
+        "model": "deepseek-chat",
+        "api_key": api_keys["DEEPSEEK_API_KEY"],
+        "base_url": "https://api.deepseek.com/v1"
+    }]
+    
+    return config_list
+
+def get_deepseek_config(config_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    获取DeepSeek API配置列表（从config_api_keys.json文件）
+    
+    Args:
+        config_path: 配置文件路径，如果为None则使用默认路径
+        
+    Returns:
+        DeepSeek API配置列表
+    """
+    return get_deepseek_config_from_api_keys(config_path)
 
 def save_to_csv(data: pd.DataFrame, filename: str, index: bool = True) -> str:
     """
@@ -295,31 +353,4 @@ def clear_cache(prefix: Optional[str] = None) -> int:
             except Exception as e:
                 print(f"删除缓存文件 {cache_file} 时出错: {str(e)}")
     
-    return count
-
-def get_deepseek_config(config_path: str = None, model_name: str = None):
-    """
-    获取DeepSeek API配置
-    
-    Args:
-        config_path: 配置文件路径，默认为项目根目录下的DEEPSEEK_CONFIG
-        model_name: 模型名称，用于过滤配置
-        
-    Returns:
-        DeepSeek API配置列表
-    """
-    if config_path is None:
-        # 尝试在当前目录和上级目录查找配置文件
-        if os.path.exists("DEEPSEEK_CONFIG"):
-            config_path = "DEEPSEEK_CONFIG"
-        elif os.path.exists("../DEEPSEEK_CONFIG"):
-            config_path = "../DEEPSEEK_CONFIG"
-        else:
-            raise FileNotFoundError("找不到DEEPSEEK_CONFIG文件")
-    
-    config_list = autogen.config_list_from_json(config_path)
-    
-    if model_name:
-        config_list = [config for config in config_list if config.get("model") == model_name]
-        
-    return config_list 
+    return count 

@@ -1,0 +1,43 @@
+# Python虚拟环境
+finrobot_env/
+env/
+venv/
+ENV/
+
+# Python缓存
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# 构建和分发
+build/
+dist/
+*.egg-info/
+*.egg
+
+# 包含敏感信息的配置文件
+config_api_keys.json
+
+# 缓存目录
+.cache/
+
+# 测试生成的输出文件
+industry_analysis_*.markdown
+*_prediction.md
+*.html
+prediction_*.md
+portfolio_*.md
+
+# IDE配置
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 日志文件
+*.log 

@@ -1,39 +1,27 @@
-# 核心依赖
-pyautogen>=0.2.19
-ipython
-huggingface_hub
-matplotlib
+# 核心依赖 - 这些是项目运行必需的
+# ========= 版本兼容组合选项 =========
 
-# 中国金融数据库
-akshare>=1.10.0  # 中国金融数据接口
-tushare  # 中国金融数据接口
+# OpenAI和AutoGen相关
+openai>=1.72.0  # 新版API，需要与pyautogen兼容
+pyautogen>=0.8.5  # 需要Rust编译，与新版openai兼容
 
-# 数据处理
-numpy
-pandas
-pyPDF2
-reportlab
+# 选项3：最小依赖（仅基本功能）
+requests>=2.31.0  # 用于API请求
 
-# 网页解析
-beautifulsoup4  # 网页解析
+# 数据处理 - 这些是处理金融数据必需的
+pandas  # 数据处理核心
+numpy  # pandas依赖
 
-# 图表和可视化
-mplfinance
-plotly
+# 数据可视化
+matplotlib>=3.10.0  # 用于绘图
 
-# 包装
+# 金融数据源
+akshare>=1.16.0  # 中国金融数据接口
+py-mini-racer>=0.6.0  # akshare依赖项
+
+# CLI和开发工具
 setuptools>=41.4.0
 wheel>=0.33.6
 
-# 其他工具
-aiohttp==3.8.5
-langchain==0.1.20
-nltk==3.8.1
-ratelimit==2.2.1
-Requests==2.31.0
-scikit_learn==1.5.0
-starlette==0.37.2
-tenacity==8.3.0
-tqdm==4.66.1
-typing_extensions==4.9.0
-unstructured==0.8.1 
+# typing相关
+typing_extensions>=4.9.0  # 确保版本兼容

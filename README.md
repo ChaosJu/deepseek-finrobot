@@ -4,104 +4,103 @@
 
 **AI代理概念**：AI代理是一个智能实体，使用大型语言模型作为其"大脑"来感知环境、做出决策并执行操作。与传统人工智能不同，AI代理具有独立思考和利用工具逐步实现给定目标的能力。
 
-## 安装
+## 项目结构
 
-**1. (推荐) 创建新的虚拟环境**
+DeepSeek FinRobot 项目由以下主要组件构成：
 
-```bash
-conda create --name deepseek_finrobot python=3.10
-conda activate deepseek_finrobot
-```
+- **agents/** - 多种金融AI代理的实现，包括市场预测、财务报告、新闻分析等专业代理
+- **data_source/** - 数据源接口，用于获取金融市场数据、新闻和公司信息
+- **utils.py** - 工具函数模块，提供各种辅助功能
+- **cli.py** - 命令行接口，便于用户快速使用各种代理功能
+- **openai_adapter.py** - DeepSeek API适配器，提供与DeepSeek大语言模型交互的标准接口
 
-**2. 下载DeepSeek FinRobot仓库**
+### openai_adapter.py
 
-```bash
-git clone https://github.com/yourusername/deepseek_finrobot.git
-cd deepseek_finrobot
-```
+`openai_adapter.py` 模块是整个项目的核心组件之一，它提供了与DeepSeek API进行交互的标准接口。主要功能包括：
 
-**3. 安装deepseek_finrobot及其依赖**
+- **get_completion()** - 单轮问答接口，向DeepSeek模型发送单个提示并获取回复
+- **get_chat_completion()** - 多轮对话接口，支持发送消息列表实现连续对话
+- **get_llm_config_for_autogen()** - 生成适用于AutoGen框架的配置，是连接DeepSeek API和AutoGen框架的桥梁
 
-```bash
-pip install -e .
-```
+这个适配器的设计类似于OpenAI API的接口格式，使得项目可以方便地使用DeepSeek的大语言模型服务，同时保持与其他LLM提供商的兼容性。
 
-**4. 配置DEEPSEEK_CONFIG文件**
+### utils.py中的关键函数
 
-1) 重命名DEEPSEEK_CONFIG_sample为DEEPSEEK_CONFIG
-2) 添加您的DeepSeek API密钥
+`utils.py` 文件包含多个重要的工具函数，其中包括：
 
-**5. 配置config_api_keys文件**
-
-1) 重命名config_api_keys_sample为config_api_keys
-2) 添加您的各种API密钥（如有需要）
-
-**6. 开始使用教程**
-
-```
-# 在tutorials目录中查找这些笔记本
-1) agent_market_forecaster.ipynb
-2) agent_annual_report.ipynb
-3) agent_trade_strategist.ipynb
-```
-
-## DeepSeek FinRobot生态系统
-
-### DeepSeek FinRobot的整体框架分为四个不同的层，每个层都旨在解决金融AI处理和应用的特定方面：
-
-1. **金融AI代理层**：金融AI代理层包括金融思维链（CoT）提示，增强复杂分析和决策能力。市场预测代理、文档分析代理和交易策略代理利用CoT将金融挑战分解为逻辑步骤，将其先进算法和领域专业知识与金融市场的不断变化动态相结合，以获得精确、可操作的见解。
-2. **金融LLM算法层**：金融LLM算法层配置并使用专门针对特定领域和全球市场分析调整的模型。
-3. **LLMOps和DataOps层**：LLMOps层实施多源集成策略，为特定金融任务选择最合适的LLM，利用一系列最先进的模型。
-4. **多源LLM基础模型层**：这一基础层支持各种通用和专业LLM的即插即用功能。
-
-## 功能特性
-
-- 中国金融数据源支持：
-  - **AKShare**：提供丰富的中国市场数据，包括股票、债券、基金等
-  - **TuShare**：提供中国金融市场数据，包括股票、指数、基金等
-- 中国财经新闻数据源支持：
-  - **东方财富**：获取财经新闻、股票公告等
-  - **新浪财经**：获取股票新闻、行情等
-  - **金十数据**：获取重大财经新闻
-  - **央视财经**：获取央视财经新闻
-  - **百度财经**：获取市场新闻
-- 专业金融代理：
-  - **市场预测代理**：分析A股数据和新闻，预测股票走势
-  - **财务报告代理**：生成A股公司财务分析报告
-  - **新闻分析代理**：分析中国财经新闻对市场和个股的影响
-  - **行业分析代理**：分析行业趋势和投资机会
-  - **投资组合代理**：构建和优化投资组合，提供资产配置建议
-  - **技术分析代理**：使用技术指标分析股票走势，提供交易信号
-- 高级功能：
-  - **数据缓存**：自动缓存数据，提高性能
-  - **批量处理**：支持批量分析多个股票或行业
-  - **结果导出**：支持导出分析结果为Markdown、HTML或文本格式
-  - **命令行工具**：提供简单易用的命令行接口
+- **get_deepseek_config()** - 获取DeepSeek API配置列表，用于设置与DeepSeek API的连接
+- **get_deepseek_config_from_api_keys()** - 从config_api_keys.json文件生成DeepSeek API配置列表
+- **cache_data()**, **get_cached_data()** - 提供数据缓存功能，提高性能
+- **format_financial_number()** - 格式化金融数字，便于阅读和展示
 
 ## 快速开始
 
-### 安装
+### 下载仓库
+
+首先，下载项目代码：
 
 ```bash
-pip install -e .
+git clone https://github.com/yourusername/deepseek_finrobot.git
+cd deepseek-finrobot
 ```
 
 ### 配置API密钥
 
-1. 复制配置文件模板：
-
-```bash
-cp config_api_keys_sample.json config_api_keys.json
-```
-
-2. 编辑`config_api_keys.json`，填入你的API密钥：
+在安装依赖之前，需要配置DeepSeek API密钥。创建或编辑`config_api_keys.json`文件，添加您的API密钥：
 
 ```json
 {
   "DEEPSEEK_API_KEY": "your-deepseek-api-key",
-  "AKSHARE_TOKEN": "your-akshare-token",
-  "TUSHARE_TOKEN": "your-tushare-token"
+  "OPENAI_API_KEY": "placeholder"  // 可选，用于AutoGen框架兼容性
 }
+```
+
+### 安装
+
+完成API密钥配置后，您可以使用以下命令快速安装：
+
+```bash
+# 使用安装脚本（自动创建虚拟环境并安装所有依赖）
+bash install.sh
+```
+
+您也可以手动安装：
+
+```bash
+# 创建虚拟环境（推荐）
+python -m venv finrobot_env
+source finrobot_env/bin/activate  # Linux/Mac
+# 或 finrobot_env\Scripts\activate  # Windows
+
+# 安装所有依赖
+pip install -r requirements.txt  # 安装所有必要的依赖
+pip install -e .                 # 以开发模式安装项目本身
+```
+
+#### 关键依赖
+
+项目依赖以下主要包：
+
+- **openai>=1.72.0** - OpenAI API客户端，用于与DeepSeek API交互
+- **pyautogen>=0.8.5** - AutoGen框架，用于构建AI代理
+- **pandas & numpy** - 数据处理核心组件
+- **matplotlib>=3.10.0** - 用于数据可视化
+- **akshare>=1.16.0** - 中国金融数据接口
+- **requests>=2.31.0** - 处理HTTP请求
+
+### 验证安装
+
+安装完成后，您可以运行以下测试脚本来验证安装是否正确：
+
+```bash
+# 测试基本功能
+python test_minimal.py
+
+# 测试API密钥（需要先配置API密钥）
+python test_api_key.py
+
+# 测试市场预测代理（需要先配置API密钥）
+python test_market_agent.py
 ```
 
 ### 使用示例
@@ -221,125 +220,115 @@ print(optimization)
 portfolio_manager.export_recommendation(recommendation, format="markdown", output_file="portfolio.md")
 ```
 
-#### 技术分析代理
+#### 其他代理
 
-```python
-from deepseek_finrobot.agents import TechnicalAnalysisAgent
+项目还支持以下代理：
+- **技术分析代理** (`TechnicalAnalysisAgent`)
+- **财务报告代理** (`FinancialReportAgent`)
+- **新闻分析代理** (`NewsAnalysisAgent`)
 
-# 加载LLM配置
-llm_config = {
-    "config_list": [
-        {
-            "model": "deepseek-chat",
-            "api_key": "your-deepseek-api-key",
-            "base_url": "https://api.deepseek.com/v1",
-        }
-    ],
-    "temperature": 0.7,
-}
-
-# 创建技术分析代理
-analyst = TechnicalAnalysisAgent(llm_config)
-
-# 进行技术分析
-analysis = analyst.analyze("000001", period="daily", days=120)
-print(analysis)
-
-# 批量分析多个股票
-symbols = ["000001", "600519", "000858"]
-analyses = analyst.batch_analyze(symbols, period="daily", days=120, max_workers=3)
-for symbol, result in analyses.items():
-    print(f"股票 {symbol} 分析结果: {result[:100]}...")
-
-# 导出分析结果
-analyst.export_analysis(analysis, format="html", output_file="technical_analysis.html")
-```
-
-#### 财务报告代理
-
-```python
-from deepseek_finrobot.agents import FinancialReportAgent
-
-# 加载LLM配置
-llm_config = {
-    "config_list": [
-        {
-            "model": "deepseek-chat",
-            "api_key": "your-deepseek-api-key",
-            "base_url": "https://api.deepseek.com/v1",
-        }
-    ],
-    "temperature": 0.7,
-}
-
-# 创建财务报告代理
-reporter = FinancialReportAgent(llm_config)
-
-# 生成财务分析报告
-report = reporter.generate_report("000001")
-print(report)
-```
-
-#### 新闻分析代理
-
-```python
-from deepseek_finrobot.agents import NewsAnalysisAgent
-
-# 加载LLM配置
-llm_config = {
-    "config_list": [
-        {
-            "model": "deepseek-chat",
-            "api_key": "your-deepseek-api-key",
-            "base_url": "https://api.deepseek.com/v1",
-        }
-    ],
-    "temperature": 0.7,
-}
-
-# 创建新闻分析代理
-analyzer = NewsAnalysisAgent(llm_config)
-
-# 分析财经新闻
-analysis = analyzer.analyze_news("人工智能", days=3, limit=5)
-print(analysis)
-```
-
-### 命令行工具
-
-安装后，可以使用`finrobot`命令行工具：
+### 使用命令行工具
 
 ```bash
 # 预测股票走势
-finrobot predict 000001 --days 7 --export --format markdown
-
-# 批量预测多个股票
-finrobot predict 000001,600519,000858 --batch --workers 3 --export
+python -m deepseek_finrobot.cli predict 000001 --days 7 --export --format markdown
 
 # 分析行业趋势
-finrobot industry 银行 --days 30 --export
-
-# 批量分析多个行业
-finrobot industry 银行,医药,计算机 --batch --workers 3
+python -m deepseek_finrobot.cli industry 银行 --days 30 --export
 
 # 分析财经新闻
-finrobot news 人工智能 --days 3 --limit 10
-
-# 生成财务分析报告
-finrobot report 000001
+python -m deepseek_finrobot.cli news 人工智能 --days 3 --limit 10
 
 # 构建投资组合
-finrobot portfolio 000001,600519,000858 --risk 中等 --horizon 长期 --amount 100000 --export
-
-# 优化投资组合
-finrobot optimize 000001:30,600519:50,000858:20 --risk 中等 --horizon 长期 --export
-
-# 进行技术分析
-finrobot technical 000001 --period daily --days 120 --export
-
-# 批量进行技术分析
-finrobot technical 000001,600519,000858 --batch --workers 3 --export
+python -m deepseek_finrobot.cli portfolio 000001,600519,000858 --risk 中等 --horizon 长期 --amount 100000 --export
 ```
+
+## 直接使用DeepSeek API适配器
+
+除了使用预构建的代理，您还可以直接使用`openai_adapter.py`模块中的函数来与DeepSeek API交互：
+
+```python
+import os
+from deepseek_finrobot.openai_adapter import get_completion, get_chat_completion
+
+# 设置API密钥环境变量
+os.environ["DEEPSEEK_API_KEY"] = "your-deepseek-api-key"
+
+# 单轮问答示例
+response = get_completion(
+    prompt="分析贵州茅台(600519)的投资价值",
+    model="deepseek-chat",
+    temperature=0.7,
+    max_tokens=1500
+)
+print(response)
+
+# 多轮对话示例
+messages = [
+    {"role": "user", "content": "你是一个专业的金融分析师"},
+    {"role": "assistant", "content": "您好，我是一名专业的金融分析师，擅长股票分析、行业研究和投资组合管理。请问有什么可以帮助您的？"},
+    {"role": "user", "content": "分析一下最近A股市场的整体走势"}
+]
+response = get_chat_completion(
+    messages=messages,
+    model="deepseek-chat",
+    temperature=0.5,
+    max_tokens=2000
+)
+print(response)
+```
+
+### 与AutoGen框架集成
+
+您也可以使用`get_llm_config_for_autogen`函数生成与AutoGen框架兼容的配置：
+
+```python
+import os
+import autogen
+from deepseek_finrobot.openai_adapter import get_llm_config_for_autogen
+
+# 设置API密钥环境变量
+os.environ["DEEPSEEK_API_KEY"] = "your-deepseek-api-key"
+
+# 获取AutoGen兼容的配置
+config = get_llm_config_for_autogen(
+    model="deepseek-chat",
+    temperature=0.7,
+    base_url="https://api.deepseek.com/v1"
+)
+
+# 创建AutoGen代理
+assistant = autogen.AssistantAgent(
+    name="金融助手",
+    llm_config=config,
+    system_message="您是一位专业的金融分析师，擅长分析市场趋势和投资机会。"
+)
+
+user_proxy = autogen.UserProxyAgent(
+    name="用户",
+    human_input_mode="TERMINATE",
+    max_consecutive_auto_reply=10,
+    is_termination_msg=lambda x: x.get("content", "").rstrip().endswith("TERMINATE"),
+)
+
+# 启动对话
+user_proxy.initiate_chat(
+    assistant,
+    message="分析一下当前A股市场的投资机会，重点关注科技和消费板块。"
+)
+```
+
+## 测试工具
+
+项目提供了多个测试脚本，帮助验证安装和功能：
+
+- **test_minimal.py** - 测试基本工具函数和环境设置
+- **test_api_key.py** - 测试DeepSeek API密钥有效性
+- **test_agent.py** - 测试市场预测代理的基本功能
+- **test_market_agent.py** - 使用真实API密钥测试市场预测功能
+- **test_all.py** - 全面测试项目的所有主要组件
+
+使用这些测试脚本可以帮助您验证安装是否正确，以及API密钥是否有效。
 
 ## 免责声明
 

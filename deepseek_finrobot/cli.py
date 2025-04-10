@@ -8,7 +8,7 @@ import os
 import json
 from typing import Dict, Any, List, Optional
 from .agents import MarketForecasterAgent, FinancialReportAgent, NewsAnalysisAgent, IndustryAnalysisAgent, PortfolioManagerAgent, TechnicalAnalysisAgent
-from .utils import get_deepseek_config, register_keys_from_json, get_current_date
+from .utils import get_current_date, get_deepseek_config, register_keys_from_json
 
 def load_config() -> Dict[str, Any]:
     """
@@ -21,17 +21,35 @@ def load_config() -> Dict[str, Any]:
         # 尝试加载API密钥
         config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config_api_keys.json")
         if os.path.exists(config_path):
-            register_keys_from_json(config_path)
+            keys = register_keys_from_json(config_path)
+            if not keys:
+                print("\n警告: 未找到有效的API密钥配置")
+                print("请确保您已从config_api_keys_sample创建了config_api_keys.json文件，并填入有效的API密钥")
+            
+            # 检查是否有DeepSeek API密钥
+            if "DEEPSEEK_API_KEY" not in keys or not keys["DEEPSEEK_API_KEY"]:
+                print("\n错误: 未找到有效的DeepSeek API密钥")
+                print("请确保config_api_keys.json中包含DEEPSEEK_API_KEY")
+                sys.exit(1)
+        else:
+            print(f"\n错误: 找不到配置文件 {config_path}")
+            print("请从config_api_keys_sample创建config_api_keys.json文件")
+            sys.exit(1)
         
         # 加载DeepSeek配置
-        llm_config = {
-            "config_list": get_deepseek_config(),
-            "temperature": 0.7,
-        }
-        
-        return llm_config
+        try:
+            llm_config = {
+                "config_list": get_deepseek_config(),
+                "temperature": 0.7,
+            }
+            return llm_config
+        except FileNotFoundError as e:
+            print(f"\n错误: {str(e)}")
+            print("请从DEEPSEEK_CONFIG_sample创建DEEPSEEK_CONFIG文件")
+            sys.exit(1)
     except Exception as e:
-        print(f"加载配置出错: {str(e)}")
+        print(f"\n加载配置出错: {str(e)}")
+        print("请确保您已正确设置配置文件，并安装了所有必需的依赖项")
         sys.exit(1)
 
 def predict_stock(args):
@@ -41,36 +59,54 @@ def predict_stock(args):
     Args:
         args: 命令行参数
     """
-    llm_config = load_config()
-    forecaster = MarketForecasterAgent(llm_config)
-    
-    if args.batch:
-        # 批量预测
-        symbols = args.symbol.split(',')
-        print(f"批量预测股票: {', '.join(symbols)}")
+    try:
+        llm_config = load_config()
+        forecaster = MarketForecasterAgent(llm_config)
         
-        predictions = forecaster.batch_predict(symbols, days=args.days, max_workers=args.workers)
-        
-        for symbol, prediction in predictions.items():
-            print(f"\n===== 股票 {symbol} 预测结果 =====\n")
-            print(prediction)
+        if args.batch:
+            # 批量预测
+            symbols = args.symbol.split(',')
+            print(f"批量预测股票: {', '.join(symbols)}")
             
-            if args.export:
-                output_file = f"stock_prediction_{symbol}_{get_current_date()}.{args.format}"
-                forecaster.export_prediction(prediction, format=args.format, output_file=output_file)
-                print(f"\n预测结果已导出到: {output_file}")
-    else:
-        # 单个预测
-        print(f"预测股票: {args.symbol}")
-        
-        prediction = forecaster.predict(args.symbol, days=args.days)
-        print("\n===== 预测结果 =====\n")
-        print(prediction)
-        
-        if args.export:
-            output_file = f"stock_prediction_{args.symbol}_{get_current_date()}.{args.format}"
-            forecaster.export_prediction(prediction, format=args.format, output_file=output_file)
-            print(f"\n预测结果已导出到: {output_file}")
+            predictions = forecaster.batch_predict(symbols, days=args.days, max_workers=args.workers)
+            
+            for symbol, prediction in predictions.items():
+                print(f"\n===== 股票 {symbol} 预测结果 =====\n")
+                try:
+                    print(prediction)
+                except UnicodeEncodeError as e:
+                    print(f"预测股票走势时出错: {e}")
+                
+                if args.export:
+                    try:
+                        output_file = f"stock_prediction_{symbol}_{get_current_date()}.{args.format}"
+                        forecaster.export_prediction(prediction, format=args.format, output_file=output_file)
+                        print(f"\n预测结果已导出到: {output_file}")
+                    except Exception as ex:
+                        print(f"导出预测结果时出错: {ex}")
+        else:
+            # 单个预测
+            print(f"预测股票: {args.symbol}")
+            
+            try:
+                prediction = forecaster.predict(args.symbol, days=args.days)
+                print("\n===== 预测结果 =====\n")
+                try:
+                    print(prediction)
+                except UnicodeEncodeError as e:
+                    print(f"预测股票走势时出错: {e}")
+                
+                if args.export:
+                    try:
+                        output_file = f"stock_prediction_{args.symbol}_{get_current_date()}.{args.format}"
+                        forecaster.export_prediction(prediction, format=args.format, output_file=output_file)
+                        print(f"\n预测结果已导出到: {output_file}")
+                    except Exception as ex:
+                        print(f"导出预测结果时出错: {ex}")
+            except Exception as e:
+                print(f"预测股票走势时出错: {e}")
+    except Exception as e:
+        print(f"预测过程发生错误: {e}")
 
 def analyze_industry(args):
     """
@@ -212,6 +248,48 @@ def optimize_portfolio(args):
         portfolio_manager.export_recommendation(recommendation, format=args.format, output_file=output_file)
         print(f"\n建议已导出到: {output_file}")
 
+def dynamic_adjust_portfolio(args):
+    """
+    根据市场趋势动态调整投资组合
+    
+    Args:
+        args: 命令行参数
+    """
+    llm_config = load_config()
+    portfolio_manager = PortfolioManagerAgent(llm_config)
+    
+    # 解析当前投资组合
+    current_portfolio = {}
+    for item in args.portfolio.split(','):
+        parts = item.split(':')
+        if len(parts) == 2:
+            symbol = parts[0].strip()
+            weight = float(parts[1].strip()) / 100  # 转换为小数
+            current_portfolio[symbol] = weight
+    
+    if not current_portfolio:
+        print("错误: 无效的投资组合格式，应为 'symbol1:weight1,symbol2:weight2'")
+        sys.exit(1)
+    
+    print(f"动态调整投资组合（市场趋势: {args.trend if args.trend else '自动判断'}）:")
+    for symbol, weight in current_portfolio.items():
+        print(f"  {symbol}: {weight*100:.2f}%")
+    
+    recommendation = portfolio_manager.dynamic_portfolio_adjustment(
+        current_portfolio=current_portfolio,
+        market_trend_prediction=args.trend,
+        risk_preference=args.risk,
+        investment_horizon=args.horizon
+    )
+    
+    print("\n===== 投资组合动态调整建议 =====\n")
+    print(recommendation)
+    
+    if args.export:
+        output_file = f"portfolio_adjustment_{get_current_date()}.{args.format}"
+        portfolio_manager.export_recommendation(recommendation, format=args.format, output_file=output_file)
+        print(f"\n建议已导出到: {output_file}")
+
 def technical_analyze(args):
     """
     进行技术分析
@@ -307,6 +385,16 @@ def main():
     optimize_parser.add_argument("--export", action="store_true", help="导出建议")
     optimize_parser.add_argument("--format", choices=["markdown", "html", "text"], default="markdown", help="导出格式")
     optimize_parser.set_defaults(func=optimize_portfolio)
+    
+    # 动态调整投资组合
+    adjust_parser = subparsers.add_parser("adjust", help="根据市场趋势动态调整投资组合")
+    adjust_parser.add_argument("portfolio", help="当前投资组合，格式为'symbol1:weight1,symbol2:weight2'，权重为百分比")
+    adjust_parser.add_argument("--trend", choices=["看涨", "看跌", "震荡"], help="市场趋势预测，不提供则自动判断")
+    adjust_parser.add_argument("--risk", choices=["保守", "中等", "激进"], default="中等", help="风险偏好")
+    adjust_parser.add_argument("--horizon", choices=["短期", "中期", "长期"], default="长期", help="投资期限")
+    adjust_parser.add_argument("--export", action="store_true", help="导出建议")
+    adjust_parser.add_argument("--format", choices=["markdown", "html", "text"], default="markdown", help="导出格式")
+    adjust_parser.set_defaults(func=dynamic_adjust_portfolio)
     
     # 技术分析
     technical_parser = subparsers.add_parser("technical", help="进行技术分析")
