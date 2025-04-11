@@ -544,9 +544,27 @@ class IndustryAnalysisAgent:
             # 获取市场情绪
             market_sentiment = cn_news_utils.get_stock_market_sentiment()
             
+            # 确保必要的列存在
+            required_columns = ['市盈率', '市净率']
+            for col in required_columns:
+                if col not in industry_stocks.columns:
+                    industry_stocks[col] = 0.0
+                    print(f"行业成分股数据中缺少 {col} 列，已添加默认值")
+            
             # 计算行业整体表现
             top_stocks = industry_stocks.sort_values("涨跌幅", ascending=False).head(5)
             bottom_stocks = industry_stocks.sort_values("涨跌幅").head(5)
+            
+            # 确保显示的股票数据中包含所有必要的列
+            display_columns = ['代码', '名称', '最新价', '涨跌幅', '市盈率']
+            for col in display_columns:
+                if col not in top_stocks.columns:
+                    if col == '市盈率':
+                        top_stocks[col] = 0.0
+                        bottom_stocks[col] = 0.0
+                    else:
+                        top_stocks[col] = f'未提供{col}'
+                        bottom_stocks[col] = f'未提供{col}'
             
             # 构建分析请求
             analysis_request = f"""
@@ -562,10 +580,10 @@ class IndustryAnalysisAgent:
 平均市净率: {industry_stocks['市净率'].mean():.2f}
 
 表现最好的5只股票:
-{top_stocks[['代码', '名称', '最新价', '涨跌幅', '市盈率']].to_string()}
+{top_stocks[display_columns].to_string()}
 
 表现最差的5只股票:
-{bottom_stocks[['代码', '名称', '最新价', '涨跌幅', '市盈率']].to_string()}
+{bottom_stocks[display_columns].to_string()}
 
 行业相关新闻:
 {industry_news[['title', 'content']].head(10).to_string() if not industry_news.empty else "无行业新闻"}
