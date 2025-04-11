@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from typing import Dict, List, Optional, Union, Any
 import datetime
 import os
+import pypinyin
 
 def get_stock_info(symbol: str) -> Dict[str, Any]:
     """
@@ -104,31 +105,38 @@ def get_stock_history(symbol: str, period: str = "daily",
         if not start_date:
             start_date = (datetime.datetime.now() - datetime.timedelta(days=365)).strftime("%Y%m%d")
             
-        # 根据周期选择不同的函数
-        if period == "daily":
-            df = ak.stock_zh_a_hist(symbol=symbol, period="daily", 
-                                   start_date=start_date, end_date=end_date, 
-                                   adjust=adjust)
-        elif period == "weekly":
-            df = ak.stock_zh_a_hist(symbol=symbol, period="weekly", 
-                                   start_date=start_date, end_date=end_date, 
-                                   adjust=adjust)
-        elif period == "monthly":
-            df = ak.stock_zh_a_hist(symbol=symbol, period="monthly", 
-                                   start_date=start_date, end_date=end_date, 
-                                   adjust=adjust)
-        else:
+        # 调用AKShare获取A股历史数据
+        df = ak.stock_zh_a_hist(
+            symbol=symbol, 
+            period=period, 
+            start_date=start_date, 
+            end_date=end_date, 
+            adjust=adjust
+        )
+        
+        if df.empty:
+            print(f"获取股票历史数据为空: {symbol}")
             return pd.DataFrame()
             
-        # 重命名列
+        # 重命名列，确保列名为小写
         df.columns = [col.lower() for col in df.columns]
         
-        # 将日期列转换为索引
-        if '日期' in df.columns:
-            df = df.set_index('日期')
-        elif 'date' in df.columns:
-            df = df.set_index('date')
-            
+        # 处理日期列并转换为索引
+        date_columns = ['日期', 'date']
+        date_col = next((col for col in date_columns if col in df.columns), None)
+        
+        if date_col:
+            # 确保日期格式一致
+            if isinstance(df[date_col].iloc[0], str):
+                df[date_col] = pd.to_datetime(df[date_col])
+            df = df.set_index(date_col)
+        
+        # 确保数值列是浮点数
+        numeric_cols = ['开盘', '收盘', '最高', '最低', '成交额', '涨跌幅', '涨跌额', '振幅', '换手率']
+        for col in [c.lower() for c in numeric_cols]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+                
         return df
     except Exception as e:
         print(f"获取股票历史数据时出错: {e}")
@@ -157,7 +165,39 @@ def get_stock_realtime_quote(symbol: str) -> Dict[str, Any]:
         # 转换为字典
         result = df.iloc[0].to_dict()
         
-        return result
+        # 确保返回标准字段名称
+        field_mapping = {
+            '最新价': '最新价',
+            '涨跌幅': '涨跌幅',
+            '涨跌额': '涨跌额', 
+            '成交量': '成交量',
+            '成交额': '成交额',
+            '振幅': '振幅',
+            '最高': '最高',
+            '最低': '最低',
+            '今开': '今开',
+            '昨收': '昨收',
+            '量比': '量比',
+            '换手率': '换手率',
+            '市盈率-动态': '市盈率',
+            '市净率': '市净率',
+            '总市值': '总市值',
+            '流通市值': '流通市值'
+        }
+        
+        standardized_result = {}
+        for original_key, standard_key in field_mapping.items():
+            if original_key in result:
+                standardized_result[standard_key] = result[original_key]
+            else:
+                standardized_result[standard_key] = None
+                
+        # 添加代码和名称字段
+        standardized_result['代码'] = symbol
+        if '名称' in result:
+            standardized_result['名称'] = result['名称']
+        
+        return standardized_result
     except Exception as e:
         print(f"获取股票实时行情时出错: {e}")
         return {"error": str(e)}
@@ -368,6 +408,12 @@ def get_stock_industry_list() -> pd.DataFrame:
     
     Returns:
         行业列表DataFrame
+    
+    Note:
+        使用pypinyin模块可以将行业名称转换为拼音，用于排序和搜索
+        使用示例: 
+        from pypinyin import lazy_pinyin
+        df['拼音'] = df['板块名称'].apply(lambda x: ''.join(lazy_pinyin(x)))
     """
     try:
         # 获取行业列表
@@ -524,7 +570,7 @@ def get_stock_research_report(symbol: str = None, category: str = None) -> pd.Da
         研究报告DataFrame
     """
     try:
-        # 尝试获取研究报告
+        # 获取研究报告
         if symbol:
             df = ak.stock_research_report_em(symbol=symbol)
         elif category:
@@ -532,134 +578,188 @@ def get_stock_research_report(symbol: str = None, category: str = None) -> pd.Da
         else:
             df = ak.stock_research_report_em()
         
-        # 确保返回的DataFrame包含必要的列
-        if not df.empty and ('title' not in df.columns or 'author' not in df.columns):
-            # 尝试映射可能的列名
-            col_mapping = {}
-            if 'title' not in df.columns:
-                for possible_col in ['标题', '报告名称', '名称', '报告标题']:
-                    if possible_col in df.columns:
-                        col_mapping[possible_col] = 'title'
-                        break
-                # 如果找不到匹配的列，使用第一列
-                if 'title' not in col_mapping.values():
-                    df['title'] = df.iloc[:, 0] if len(df.columns) > 0 else "未知标题"
-            
-            if 'author' not in df.columns:
-                for possible_col in ['作者', '分析师', '研究员', '撰写人']:
-                    if possible_col in df.columns:
-                        col_mapping[possible_col] = 'author'
-                        break
-                # 如果找不到匹配的列，添加默认值
-                if 'author' not in col_mapping.values():
-                    df['author'] = "未知分析师"
-            
-            # 应用列映射
-            if col_mapping:
-                df = df.rename(columns=col_mapping)
-            
-        # 确保结果包含这两列
-        if not df.empty and ('title' in df.columns and 'author' in df.columns):
-            return df
-        else:
-            # 如果缺少必要列，创建一个包含这些列的空DataFrame
-            print("研究报告数据缺少必要的列，创建默认数据")
+        # 如果DataFrame为空，返回默认数据
+        if df.empty:
+            print("未获取到研究报告数据，创建默认数据")
             data = {
                 'title': [f"{symbol or '市场'}行业分析报告"],
                 'author': ["分析师团队"]
-            }
-            return pd.DataFrame(data)
-            
-    except Exception as e:
-        print(f"获取股票研究报告时出错: {e}")
-        # 尝试替代方法获取研究报告
-        try:
-            # 尝试使用替代接口获取研究报告
-            print("尝试使用替代接口获取研究报告...")
-            
-            # 尝试不同的函数名，因为AKShare可能更改了函数名称
-            try:
-                if symbol:
-                    df = ak.stock_report_em(symbol=symbol)
-                else:
-                    df = ak.stock_report_em()
-            except Exception as func_e:
-                print(f"尝试stock_report_em失败: {func_e}")
-                try:
-                    # 尝试另一个可能的函数名
-                    if symbol:
-                        df = ak.stock_research_em(symbol=symbol)
-                    else:
-                        df = ak.stock_research_em()
-                except Exception as func_e2:
-                    print(f"尝试stock_research_em失败: {func_e2}")
-                    # 最后尝试研报API
-                    try:
-                        if symbol:
-                            df = ak.stock_report_research(symbol=symbol)
-                        else:
-                            df = ak.stock_report_research()
-                    except Exception as func_e3:
-                        print(f"尝试stock_report_research失败: {func_e3}")
-                        # 尝试获取券商研报
-                        try:
-                            df = ak.stock_research_report_industry_em()
-                        except Exception as func_e4:
-                            print(f"尝试stock_research_report_industry_em失败: {func_e4}")
-                            # 所有API都失败，创建默认数据
-                            print("所有研报API都失败，创建默认数据")
-                            data = {
-                                'title': [f"{symbol or '市场'}行业分析报告"],
-                                'author': ["分析师团队"]
-                            }
-                            return pd.DataFrame(data)
-            
-            # 如果成功获取数据，确保至少有title和author列
-            if not df.empty:
-                # 确保列名一致性
-                col_mapping = {}
-                if 'title' not in df.columns:
-                    for possible_col in ['标题', '报告名称', '名称', '报告标题']:
-                        if possible_col in df.columns:
-                            col_mapping[possible_col] = 'title'
-                            break
-                    # 如果找不到匹配的列，使用第一列
-                    if 'title' not in col_mapping.values():
-                        df['title'] = df.iloc[:, 0] if len(df.columns) > 0 else "未知标题"
-                
-                if 'author' not in df.columns:
-                    for possible_col in ['作者', '分析师', '研究员', '撰写人']:
-                        if possible_col in df.columns:
-                            col_mapping[possible_col] = 'author'
-                            break
-                    # 如果找不到匹配的列，添加默认值
-                    if 'author' not in col_mapping.values():
-                        df['author'] = "未知分析师"
-                
-                # 应用列映射
-                if col_mapping:
-                    df = df.rename(columns=col_mapping)
-                
-                print(f"成功使用替代接口获取研究报告，共 {len(df)} 条")
-                return df
-            
-            # 如果仍然无法获取数据，创建一个模拟数据
-            print("无法获取真实研究报告，创建模拟数据")
-            data = {
-                'title': [
-                    f"{symbol or '市场'}行业分析报告", 
-                    f"{symbol or '市场'}投资价值分析", 
-                    f"{symbol or '市场'}未来展望"
-                ],
-                'author': ["分析师A", "分析师B", "分析师C"]
             }
             return pd.DataFrame(data)
         
-        except Exception as inner_e:
-            print(f"使用替代接口获取研究报告时出错: {inner_e}")
-            # 创建一个包含必要列的DataFrame
-            data = {
-                'title': [f"{symbol or '市场'}行业分析报告"],
-                'author': ["分析师团队"]
-            }
-            return pd.DataFrame(data) 
+        # 标准化列名
+        if '报告名称' in df.columns and 'title' not in df.columns:
+            df = df.rename(columns={'报告名称': 'title'})
+        elif '标题' in df.columns and 'title' not in df.columns:
+            df = df.rename(columns={'标题': 'title'})
+            
+        if '研究员' in df.columns and 'author' not in df.columns:
+            df = df.rename(columns={'研究员': 'author'})
+        elif '分析师' in df.columns and 'author' not in df.columns:
+            df = df.rename(columns={'分析师': 'author'})
+        
+        # 确保必要的列存在
+        if 'title' not in df.columns:
+            df['title'] = f"{symbol or '市场'}行业分析报告"
+            
+        if 'author' not in df.columns:
+            df['author'] = "未知分析师"
+            
+        return df
+    except Exception as e:
+        print(f"获取股票研究报告时出错: {e}")
+        # 返回一个默认的研究报告数据
+        data = {
+            'title': [f"{symbol or '市场'}行业分析报告"],
+            'author': ["分析师团队"]
+        }
+        return pd.DataFrame(data)
+
+def get_stock_concept_history(concept_code: str, period: str = "daily", 
+                            start_date: str = None, end_date: str = None,
+                            adjust: str = "") -> pd.DataFrame:
+    """
+    获取板块概念的历史行情数据
+    
+    Args:
+        concept_code: 概念代码（如：BK0815 表示半导体概念）
+        period: 时间周期，可选 daily, weekly, monthly
+        start_date: 开始日期，格式 YYYYMMDD，默认为近一年
+        end_date: 结束日期，格式 YYYYMMDD，默认为今天
+        adjust: 复权类型，默认为不复权
+        
+    Returns:
+        概念历史数据DataFrame
+    
+    Note:
+        概念代码可以通过get_stock_concept_list函数获取
+    """
+    try:
+        # 设置默认日期
+        if not end_date:
+            end_date = datetime.datetime.now().strftime("%Y%m%d")
+        if not start_date:
+            start_date = (datetime.datetime.now() - datetime.timedelta(days=365)).strftime("%Y%m%d")
+            
+        # 调用AKShare获取概念历史数据
+        df = ak.stock_board_concept_hist_em(
+            symbol=concept_code, 
+            period=period, 
+            start_date=start_date, 
+            end_date=end_date, 
+            adjust=adjust
+        )
+        
+        if df.empty:
+            print(f"获取概念历史数据为空: {concept_code}")
+            return pd.DataFrame()
+        
+        # 重命名列，确保列名为小写
+        df.columns = [col.lower() for col in df.columns]
+        
+        # 处理日期列并转换为索引
+        date_columns = ['日期', 'date']
+        date_col = next((col for col in date_columns if col in df.columns), None)
+        
+        if date_col:
+            # 确保日期格式一致
+            if isinstance(df[date_col].iloc[0], str):
+                df[date_col] = pd.to_datetime(df[date_col])
+            df = df.set_index(date_col)
+            
+        return df
+    except Exception as e:
+        print(f"获取概念历史数据时出错: {e}")
+        return pd.DataFrame()
+
+def get_stock_industry_hist_min(industry_code: str, period: str = "1", 
+                              adjust: str = "") -> pd.DataFrame:
+    """
+    获取板块行业的分钟级历史行情数据
+    
+    Args:
+        industry_code: 行业代码（如：BK0475 表示银行行业）
+        period: 分钟周期，可选 1, 5, 15, 30, 60
+        adjust: 复权类型，默认为不复权
+        
+    Returns:
+        行业分钟级历史数据DataFrame
+    
+    Note:
+        行业代码可以通过get_stock_industry_list函数获取
+    """
+    try:
+        # 调用AKShare获取行业分钟级历史数据
+        df = ak.stock_board_industry_hist_min_em(
+            symbol=industry_code, 
+            period=period, 
+            adjust=adjust
+        )
+        
+        if df.empty:
+            print(f"获取行业分钟级历史数据为空: {industry_code}")
+            return pd.DataFrame()
+        
+        # 重命名列，确保列名为小写
+        df.columns = [col.lower() for col in df.columns]
+        
+        # 处理日期列并转换为索引
+        time_columns = ['时间', 'time', 'datetime']
+        time_col = next((col for col in time_columns if col in df.columns), None)
+        
+        if time_col:
+            # 确保日期格式一致
+            if isinstance(df[time_col].iloc[0], str):
+                df[time_col] = pd.to_datetime(df[time_col])
+            df = df.set_index(time_col)
+            
+        return df
+    except Exception as e:
+        print(f"获取行业分钟级历史数据时出错: {e}")
+        return pd.DataFrame()
+
+def get_stock_concept_hist_min(concept_code: str, period: str = "1", 
+                             adjust: str = "") -> pd.DataFrame:
+    """
+    获取板块概念的分钟级历史行情数据
+    
+    Args:
+        concept_code: 概念代码（如：BK0815 表示半导体概念）
+        period: 分钟周期，可选 1, 5, 15, 30, 60
+        adjust: 复权类型，默认为不复权
+        
+    Returns:
+        概念分钟级历史数据DataFrame
+    
+    Note:
+        概念代码可以通过get_stock_concept_list函数获取
+    """
+    try:
+        # 调用AKShare获取概念分钟级历史数据
+        df = ak.stock_board_concept_hist_min_em(
+            symbol=concept_code, 
+            period=period, 
+            adjust=adjust
+        )
+        
+        if df.empty:
+            print(f"获取概念分钟级历史数据为空: {concept_code}")
+            return pd.DataFrame()
+        
+        # 重命名列，确保列名为小写
+        df.columns = [col.lower() for col in df.columns]
+        
+        # 处理日期列并转换为索引
+        time_columns = ['时间', 'time', 'datetime']
+        time_col = next((col for col in time_columns if col in df.columns), None)
+        
+        if time_col:
+            # 确保日期格式一致
+            if isinstance(df[time_col].iloc[0], str):
+                df[time_col] = pd.to_datetime(df[time_col])
+            df = df.set_index(time_col)
+            
+        return df
+    except Exception as e:
+        print(f"获取概念分钟级历史数据时出错: {e}")
+        return pd.DataFrame() 

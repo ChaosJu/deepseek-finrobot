@@ -25,3 +25,5 @@ wheel>=0.33.6
 
 # typing相关
 typing_extensions>=4.9.0  # 确保版本兼容
+
+pypinyin==0.54.0
