@@ -233,14 +233,15 @@ portfolio_manager.export_recommendation(recommendation, format="markdown", outpu
 # 预测股票走势
 python -m deepseek_finrobot.cli predict 000001 --days 7 --export --format markdown （已经测试）
 
-# 分析行业趋势
-python -m deepseek_finrobot.cli industry 银行 --days 30 --export
-
-# 分析财经新闻
-python -m deepseek_finrobot.cli news 人工智能 --days 3 --limit 10
-
 # 构建投资组合
 python -m deepseek_finrobot.cli portfolio 000001,600519,000858 --risk 中等 --horizon 长期 --amount 100000 --export （已经测试）
+
+# 分析行业趋势
+# 行业名称按照股票行业分类
+python -m deepseek_finrobot.cli industry 银行 --days 30 --export（已经测试）
+
+# 分析财经新闻
+python -m deepseek_finrobot.cli news 人工智能 --days 3 --limit 10 （未测试）
 ```
 
 ## 直接使用DeepSeek API适配器
