@@ -485,59 +485,54 @@ def get_stock_concept_list() -> pd.DataFrame:
 def get_stock_industry_constituents(industry_code: str) -> pd.DataFrame:
     """
     获取行业成分股
-    
-    Args:
-        industry_code: 行业代码
-        
-    Returns:
-        行业成分股DataFrame
+    :param industry_code: 行业代码
+    :return: 成分股数据
     """
     try:
-        # 获取行业成分股
+        # 使用东方财富行业成分股接口
         df = ak.stock_board_industry_cons_em(symbol=industry_code)
         
+        # 确保必要的列存在
+        required_columns = {
+            '代码': str,
+            '名称': str,
+            '最新价': float,
+            '涨跌幅': float,
+            '市盈率': float,
+            '市净率': float
+        }
+        
+        # 重命名列（如果需要）
+        rename_map = {
+            '股票代码': '代码',
+            '股票名称': '名称',
+            '市盈率-动态': '市盈率'
+        }
+        df = df.rename(columns=rename_map)
+        
+        # 添加缺失的列并设置默认值
+        for col, dtype in required_columns.items():
+            if col not in df.columns:
+                df[col] = dtype(0)
+            df[col] = df[col].astype(dtype)
+            
+        # 如果市盈率列为空，尝试获取个股数据
+        if '市盈率' in df.columns and df['市盈率'].isna().any():
+            for idx, row in df.iterrows():
+                try:
+                    stock_info = ak.stock_a_lg_indicator(symbol=row['代码'])
+                    if not stock_info.empty and '市盈率' in stock_info.columns:
+                        df.at[idx, '市盈率'] = stock_info['市盈率'].iloc[0]
+                except:
+                    df.at[idx, '市盈率'] = 0.0
+                    
+        # 选择需要的列
+        df = df[list(required_columns.keys())]
         return df
     except Exception as e:
-        print(f"获取行业成分股时出错: {e}")
-        try:
-            # 尝试替代接口
-            print(f"尝试使用替代接口获取行业 {industry_code} 的成分股...")
-            # 不同的接口名称尝试
-            try:
-                df = ak.stock_board_industry_cons_ths(symbol=industry_code)
-            except:
-                # 如果同花顺接口不可用，尝试其他接口
-                try:
-                    df = ak.stock_board_cons_em(symbol=industry_code)
-                except:
-                    # 最后尝试东方财富的备选接口
-                    df = ak.stock_board_cons_ths(symbol=industry_code)
-            
-            # 确保有标准的列名称
-            if '代码' not in df.columns and 'code' in df.columns:
-                df = df.rename(columns={'code': '代码'})
-            if '名称' not in df.columns and 'name' in df.columns:
-                df = df.rename(columns={'name': '名称'})
-            if '最新价' not in df.columns and 'close' in df.columns:
-                df = df.rename(columns={'close': '最新价'})
-            if '涨跌幅' not in df.columns and 'change_pct' in df.columns:
-                df = df.rename(columns={'change_pct': '涨跌幅'})
-            
-            # 确保市盈率列存在
-            if '市盈率' not in df.columns:
-                df['市盈率'] = 0.0
-            
-            # 确保市净率列存在
-            if '市净率' not in df.columns:
-                df['市净率'] = 0.0
-                
-            print(f"成功使用替代接口获取行业成分股，共 {len(df)} 只股票")
-            return df
-        except Exception as inner_e:
-            print(f"使用替代接口获取行业成分股时出错: {inner_e}")
-            
-            # 如果所有方法都失败，返回空DataFrame但包含必要的列
-            return pd.DataFrame(columns=['代码', '名称', '最新价', '涨跌幅', '市盈率', '市净率'])
+        print(f"获取行业成分股失败: {e}")
+        # 返回空DataFrame，但包含所需的列
+        return pd.DataFrame(columns=list(required_columns.keys()))
 
 def get_stock_concept_constituents(concept_code: str) -> pd.DataFrame:
     """

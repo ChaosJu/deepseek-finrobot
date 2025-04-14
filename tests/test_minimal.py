@@ -11,6 +11,7 @@ import os
 try:
     # 导入工具函数
     from deepseek_finrobot.utils import get_current_date, format_financial_number
+    from deepseek_finrobot.data_source.akshare_utils import get_stock_industry_list
     
     # 导入适配器函数（如果已安装openai和适配器已更新）
     try:
@@ -24,6 +25,16 @@ try:
     print("测试基本工具函数:")
     print(f"当前日期: {get_current_date()}")
     print(f"格式化金额: {format_financial_number(1234567.89)}")
+    print("=" * 50)
+    
+    # 测试akshare工具函数
+    print("\n测试AKShare工具函数:")
+    try:
+        industry_list = get_stock_industry_list()
+        print(f"成功获取行业列表，共{len(industry_list)}个行业")
+        print("AKShare工具函数测试成功！")
+    except Exception as e:
+        print(f"AKShare工具函数测试失败: {e}")
     print("=" * 50)
     
     # 测试openai适配器（如果已安装）
