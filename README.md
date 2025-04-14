@@ -13,6 +13,7 @@ DeepSeek FinRobot 项目由以下主要组件构成：
 - **utils.py** - 工具函数模块，提供各种辅助功能
 - **cli.py** - 命令行接口，便于用户快速使用各种代理功能
 - **openai_adapter.py** - DeepSeek API适配器，提供与DeepSeek大语言模型交互的标准接口
+- **tests/** - 测试目录，包含所有测试用例和测试数据
 
 ### openai_adapter.py
 
@@ -331,6 +332,39 @@ user_proxy.initiate_chat(
 
 使用这些测试脚本可以帮助您验证安装是否正确，以及API密钥是否有效。
 
-## 免责声明
+## 运行测试
+
+项目包含一套完整的测试套件，用于验证各个组件的功能。测试文件位于`tests/`目录中。
+
+### 运行所有测试
+
+使用提供的测试运行脚本：
+
+```bash
+python run_tests.py
+```
+
+这将运行所有测试并生成覆盖率报告。
+
+### 运行特定测试
+
+您也可以使用pytest直接运行特定测试：
+
+```bash
+# 运行特定测试文件
+pytest tests/test_minimal.py
+
+# 运行特定测试函数
+pytest tests/test_minimal.py::test_basic_functionality
+
+# 运行包含特定关键字的测试
+pytest -k "basic"
+```
+
+### 测试覆盖率
+
+测试运行后，覆盖率报告将生成在`coverage_report/`目录中。您可以在浏览器中打开`coverage_report/index.html`查看详细的覆盖率报告。
+
+## 贡献指南
 
 本代码和文档根据Apache-2.0许可证发布。它们不应被视为财务建议或实时交易的建议。在进行任何交易或投资行动之前，务必谨慎行事并咨询合格的金融专业人士。 

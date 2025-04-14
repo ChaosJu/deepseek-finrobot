@@ -26,4 +26,10 @@ wheel>=0.33.6
 # typing相关
 typing_extensions>=4.9.0  # 确保版本兼容
 
+# 中文拼音转换
 pypinyin==0.54.0
+
+# 测试相关依赖
+pytest>=7.0.0  # 测试框架
+pytest-cov>=4.0.0  # 测试覆盖率
+pytest-mock>=3.10.0  # 模拟对象

@@ -29,6 +29,11 @@ industry_analysis_*.markdown
 prediction_*.md
 portfolio_*.md
 
+# 测试覆盖率报告
+coverage_report/
+.coverage
+htmlcov/
+
 # IDE配置
 .idea/
 .vscode/

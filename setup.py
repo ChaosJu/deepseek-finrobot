@@ -34,6 +34,12 @@ setup(
             'finrobot=deepseek_finrobot.cli:main',
         ],
     },
+    # 添加测试配置
+    test_suite="tests",
+    tests_require=[
+        "pytest>=7.0.0",
+        "pytest-cov>=4.0.0",
+    ],
     classifiers=[
         # Trove classifiers
         # Full list: https://pypi.python.org/pypi?%3Aaction=list_classifiers
