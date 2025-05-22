@@ -1,0 +1,1 @@
+# Contrarian Trading Bot
