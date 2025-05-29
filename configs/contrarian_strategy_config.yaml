@@ -1,0 +1,251 @@
+# ==============================================================================
+# Contrarian Trading Bot - Strategy Configuration File (示例配置文件)
+# ==============================================================================
+# This file contains example configurations for the Contrarian Trading Bot
+# and its associated agents. Adjust parameters based on strategy research
+# and backtesting.
+# (此文件包含逆向交易机器人及其关联智能体的示例配置。请根据策略研究和回测结果调整参数。)
+
+# ------------------------------------------------------------------------------
+# Global Settings / CEO Agent Configuration (全局设置 / CEO智能体配置)
+# ------------------------------------------------------------------------------
+ceo_agent_config: # Placeholder for CEO-specific settings not covered elsewhere
+  log_level: "INFO"
+  # The following detailed configs are now separate top-level sections
+  # but are logically used/managed by the CEO agent.
+
+# ------------------------------------------------------------------------------
+# Position Sizing Configuration (仓位管理配置)
+# (Used by CEOAgent to determine trade sizes)
+# ------------------------------------------------------------------------------
+position_sizing_config:
+  base_position_size_pct_of_total_portfolio: 0.02 # (占总投资组合的百分比) Default: 2% of total portfolio value for a trade.
+  position_sizing_basis: "total_portfolio_value"    # "total_portfolio_value" or "available_cash" (计算基础："总投资组合价值" 或 "可用现金")
+  
+  conviction_tiers: # (确信度等级和乘数)
+    - {"score_threshold": 0.0, "multiplier": 0.25}  # Low conviction (低确信度)
+    - {"score_threshold": 0.4, "multiplier": 0.75}  # Medium conviction (中确信度)
+    - {"score_threshold": 0.7, "multiplier": 1.25}   # High conviction (高确信度)
+  max_multiplier: 1.5                             # Max multiplier cap (最大乘数上限)
+
+  # Analyst Score Contributions to Conviction Score
+  # (分析师报告对确信度评分的贡献)
+  analyst_score_contributions:
+    short_term_value_filter: # (短期价值筛选智能体)
+      "Strongly Undervalued_bonus": 0.15
+      "Undervalued_bonus": 0.05
+      "Overvalued_penalty": -0.1 
+      "Strongly Overvalued_penalty": -0.2
+      "Value Trap Suspected_penalty": -0.5 
+    catalyst_scout: # (催化剂侦察智能体)
+      "strong_positive_catalyst_bonus": 0.1
+      "any_positive_catalyst_bonus": 0.05 # If any non-negative catalyst found
+      "strong_negative_catalyst_penalty": -0.1
+    market_theme_sentiment: # (市场主题情绪智能体)
+      "aligned_strong_positive_theme_bonus": 0.1 # If asset aligns with a strong positive theme
+      "aligned_neutral_theme_bonus": 0.0
+      "aligned_strong_negative_theme_penalty": -0.1 # If asset aligns with a strong negative theme
+    macro_policy_impact: # (宏观政策影响智能体)
+      "supportive_macro_bonus": 0.1 # If macro/policy is supportive for trade direction
+      "adverse_macro_penalty": -0.1   # If macro/policy is adverse for trade direction
+    microstructure_patterns: # (微观结构模式分析智能体贡献)
+      "PanicSelling_VolumeSpike_bonus": 0.10      # Bonus if panic selling detected (for BUY signal conviction) (恐慌抛售加分)
+      "Euphoria_BlowOffTop_penalty": -0.10       # Penalty if blow-off top detected (for BUY signal conviction) (冲高回落扣分)
+      # Add other pattern scores as they are defined
+
+# ------------------------------------------------------------------------------
+# Stop-Loss Configuration (止损配置)
+# (Used by CEOAgent to calculate initial stop-loss and manage exits)
+# ------------------------------------------------------------------------------
+stop_loss_config:
+  use_dynamic_atr_stop: true      # Whether to use ATR-based stops (是否使用动态ATR止损)
+  atr_period_for_stop: 14         # ATR calculation period (ATR计算周期)
+  base_n_atr_for_stop: 2.0        # Base N multiplier for ATR stop (基础N倍ATR止损)
+  
+  n_atr_adjustments:
+    market_volatility: 
+      "Low": -0.25     
+      "Medium": 0.0
+      "High": 0.5      
+    detailed_sentiment: 
+      "IrrationalPanic_bonus_for_N": -0.2 
+      "FundamentalScandalOrCrisis_penalty_for_N": 0.5 
+      "OverhypedRally_bonus_for_N": -0.2 
+    conviction_score: 
+      "high_conviction_n_reduction": -0.15 
+      "low_conviction_n_increase": 0.15    
+      
+  min_n_atr: 1.5                  # Minimum N for ATR multiple (最小N倍ATR)
+  max_n_atr: 3.5                  # Maximum N for ATR multiple (最大N倍ATR)
+  
+  use_crisis_exit_for_long: true 
+  crisis_exit_strategy_for_long: "TightenStopOnCrisis" 
+  news_sentiment_crisis_categories_for_long_exit: ["FundamentalScandalOrCrisis", "MajorLegalIssue"] 
+  crisis_tightened_n_atr_stop_long: 0.5 # N multiplier for tightened stop in crisis (危机时收紧止损的N倍ATR)
+
+  use_counter_signal_exit: true 
+  threshold_exit_on_counter_signal_confidence: 0.7 
+  counter_signal_sell_categories_for_long_exit: ["OverhypedRally", "FundamentalScandalOrCrisis", "SpeculativeFrenzy"] 
+  counter_signal_buy_categories_for_short_exit: ["IrrationalPanic", "OverreactionToMinorNegative"] 
+
+  # Microstructure-informed Exits (微观结构信号辅助退出)
+  use_microstructure_for_stop_adjustment: true # (是否使用微观结构信号调整止损)
+  microstructure_panic_tighten_n_atr: 1.0     # N_ATR for stop if panic selling detected (for BUY trades) (侦测到恐慌抛售时，买入交易的止损N倍ATR)
+  microstructure_euphoria_tighten_n_atr: 1.0  # N_ATR for stop if blow-off top detected (for SELL trades) (侦测到冲高回落时，卖出交易的止损N倍ATR)
+
+
+# ------------------------------------------------------------------------------
+# Profit-Taking Configuration (止盈配置)
+# (Used by CEOAgent for managing active trades)
+# ------------------------------------------------------------------------------
+profit_taking_config:
+  use_rr_profit_target: true      
+  desired_risk_reward_ratio: 2.0  
+  
+  use_partial_profit_take: true   
+  partial_profit_target_rr_ratio: 1.0 
+  partial_profit_quantity_percentage: 0.5 
+  move_stop_to_breakeven_after_partial_take: true 
+
+  use_trailing_stop: true         
+  atr_multiplier_for_trailing_activation: 1.5                                                
+  n_atr_for_trailing_stop: 1.5    
+
+  use_greed_based_profit_taking: true 
+  news_sentiment_greed_categories_for_buy_exit: ["OverhypedRally", "IrrationalExuberance", "SpeculativeFrenzy"] 
+  market_theme_greed_assessments_for_buy_exit: ["Highly Euphoric"] 
+  min_profit_factor_for_greed_exit_buy: 1.0 
+  greedy_exit_strategy_buy: "PartialAndTightenTrail" 
+  greedy_partial_exit_percentage_buy: 0.50 
+  greedy_tightened_n_atr_trail_buy: 1.0 
+
+  use_fear_based_short_covering: true 
+  news_sentiment_fear_categories_for_short_cover: ["IrrationalPanic", "OverreactionToMinorNegative"] 
+  market_theme_fear_assessments_for_short_cover: ["Capitulation/Panic", "Pessimistic"] 
+  min_profit_factor_for_fear_cover_short: 0.5 
+
+  # Microstructure-informed Profit Taking (微观结构信号辅助止盈)
+  use_microstructure_for_profit_taking: true # (是否使用微观结构信号辅助止盈)
+  # Example: If Euphoria_BlowOffTop detected with high confidence for a BUY trade, consider exiting
+  microstructure_blowoff_exit_buy_min_confidence: 0.7 # (买入交易中，侦测到冲高回落模式达到此置信度则考虑退出)
+  # Example: If PanicSelling_VolumeSpike detected with high confidence for a SELL trade, consider covering
+  microstructure_panic_cover_short_min_confidence: 0.7 # (卖出交易中，侦测到恐慌抛售模式达到此置信度则考虑回补)
+
+
+# ------------------------------------------------------------------------------
+# Microstructure Pattern Agent Configuration (微观结构模式分析智能体配置)
+# ------------------------------------------------------------------------------
+microstructure_pattern_agent_config:
+  enabled: true # (是否启用微观结构分析智能体)
+  use_tick_data_if_available: false # (是否在可用时使用Tick数据进行分析，否则默认使用分钟线) - 当前实现仅用分钟线
+  
+  # Configuration for "Panic Selling: Volume Spike with Price Drop"
+  # (恐慌性抛售：成交量激增伴随价格下跌模式配置)
+  panic_selling_volume_spike:
+    enabled: true # (是否启用此模式检测)
+    lookback_minutes_short: 5     # Short lookback for volume surge and price drop (短期回看窗口，分钟)
+    lookback_minutes_long: 30     # Long lookback for baseline average volume (长期回看窗口，分钟)
+    volume_surge_factor: 2.5      # Recent volume must be X times long-term average (成交量激增因子)
+    price_drop_threshold_pct: -2.0 # Min price drop percentage in short window (价格下跌阈值百分比)
+    base_confidence: 0.7          # Base confidence score if pattern is detected (模式检测基础置信度)
+
+  # Configuration for "Greed/Euphoria: Blow-Off Top"
+  # (贪婪/狂热：冲高回落顶部模式配置)
+  euphoria_blow_off_top:
+    enabled: true # (是否启用此模式检测)
+    lookback_minutes_price_run: 60  # Lookback for initial price run-up (价格上涨回看窗口，分钟)
+    min_price_rise_pct_for_run: 8.0 # Minimum percentage rise for the run-up (最小上涨百分比)
+    volume_surge_factor_climax: 2.0 # Volume surge factor at climax compared to run-up avg (顶点成交量激增因子)
+    post_climax_stall_minutes: 10   # Duration of price stall/minor reversal post-climax (顶点后停滞/反转分钟数)
+    reversal_threshold_pct_from_peak: -1.0 # Min price drop from peak during stall period (从顶点回落的最小百分比)
+    base_confidence: 0.75         # Base confidence score if pattern is detected (模式检测基础置信度)
+
+  # Add configurations for other patterns here as they are developed
+  # (其他模式的配置可在此添加)
+
+# ------------------------------------------------------------------------------
+# Contrarian Signal Generator / Analyzer Configuration (逆向信号生成器/分析器配置)
+# (Configures the core contrarian logic, used by ContrarianAnalyzer)
+# ------------------------------------------------------------------------------
+contrarian_analyzer_config:
+  base_threshold_sentiment_contrarian_buy: -0.4  
+  base_threshold_sentiment_contrarian_sell: 0.4 
+  pv_short_term_days: 5         
+  pv_long_term_days: 20         
+  pv_volume_factor_threshold: 1.5 
+  base_pv_price_min_change_pct: -2.0 
+  base_pv_price_max_change_pct: 7.0  
+
+  sentiment_category_adjustments:
+    IrrationalPanic: {"bonus": 0.2, "description": "市场非理性恐慌"}
+    # ... (rest of sentiment_category_adjustments as before) ...
+    Unknown: {"bonus": 0.0, "description": "未知详细情绪分类"}
+
+  dynamic_threshold_adjustments:
+    trend_adjustments:
+      # ... (rest of dynamic_threshold_adjustments as before) ...
+      pv_price_min_trend_bullish: 0.5  
+    volatility_adjustments:
+      # ... (rest of dynamic_threshold_adjustments as before) ...
+      pv_price_min_vol_low: 0.5     
+
+# ------------------------------------------------------------------------------
+# Market Data Agent Configuration (市场数据智能体配置)
+# ------------------------------------------------------------------------------
+market_data_agent_config:
+  market_state_config:
+    market_index_symbol: "000300.SH" 
+    atr_period: 14                   
+    short_ma_period: 20              
+    long_ma_period: 50               
+    volatility_norm_atr_low_medium_cutoff: 0.010  
+    volatility_norm_atr_medium_high_cutoff: 0.020 
+  # default_historical_days: 252 
+  default_atr_period_for_asset: 14 # (资产ATR计算的默认周期) Default ATR period for individual assets
+
+# ------------------------------------------------------------------------------
+# News Agent (NewsSentimentAgent) Configuration (新闻智能体/新闻情绪智能体配置)
+# ------------------------------------------------------------------------------
+news_agent_config:
+  # llm_config:
+  #   model: "deepseek-chat"
+  #   temperature: 0.5
+  default_news_limit: 10
+
+# ------------------------------------------------------------------------------
+# Specialist Analyst Agents Configuration (其他专家分析智能体配置)
+# ------------------------------------------------------------------------------
+expert_advisors_enabled:
+  short_term_value_filter: true
+  catalyst_scout: true
+  market_theme_sentiment: true
+  macro_policy_impact: true
+  microstructure_pattern_analysis: true # (新增) Enable MicrostructurePatternAgent
+
+short_term_value_filter_params:
+  # ... (params as before) ...
+  SEVERE_NEWS_KEYWORDS": ["fraud", "bankruptcy", "delisting", "investigation", "scandal", "halted", "欺诈", "破产", "退市", "调查", "丑闻", "暂停交易"]
+
+catalyst_scout_params:
+  # ... (params as before) ...
+  ANNOUNCEMENT_KEYWORDS": {
+    "management_change": ["辞职", "任命", "变更", "新任", "离任", "董事长变更", "总经理变更"]
+  }
+
+market_theme_sentiment_params:
+  # ... (params as before) ...
+
+macro_policy_impact_params:
+  # ... (params as before) ...
+  EVENT_TYPES_CONFIG": {
+    "MajorIndustry_SupportPolicy_China": {"data_type": "policy_news", "keywords": ["产业政策", "专项资金", "补贴", "扶持", "规划", "国常会", "发改委", "工信部", "科技部"]}
+  }
+
+# ------------------------------------------------------------------------------
+# Risk Management Agent Configuration (风险管理智能体配置)
+# ------------------------------------------------------------------------------
+risk_management_enabled: true
+risk_parameters:
+  # ... (params as before) ...
+  ALLOW_SHORT_SELLING: False
+```
