@@ -2,8 +2,8 @@
 # ========= 版本兼容组合选项 =========
 
 # OpenAI和AutoGen相关
-openai>=1.72.0  # 新版API，需要与pyautogen兼容
-pyautogen>=0.8.5  # 需要Rust编译，与新版openai兼容
+openai>=1.72.0  # 新版API，需要与ag2兼容
+ag2>=0.8.5  # 需要Rust编译，与新版openai兼容
 
 # 选项3：最小依赖（仅基本功能）
 requests>=2.31.0  # 用于API请求
