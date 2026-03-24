@@ -8,8 +8,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from typing import Dict, List, Optional, Union, Any
 import datetime
-import json
-import os
 import time
 import pypinyin
 
@@ -57,11 +55,19 @@ def get_stock_realtime_snapshot(ttl_seconds: int = 30, force_refresh: bool = Fal
     ):
         return cached
 
-    snapshot = _call_with_retry(ak.stock_zh_a_spot_em, max_retries=2, base_delay=0.8)
-    if isinstance(snapshot, pd.DataFrame) and not snapshot.empty:
-        _SPOT_CACHE["timestamp"] = now
-        _SPOT_CACHE["data"] = snapshot
-    return snapshot
+    try:
+        snapshot = _call_with_retry(ak.stock_zh_a_spot_em, max_retries=2, base_delay=0.8)
+        if isinstance(snapshot, pd.DataFrame) and not snapshot.empty:
+            _SPOT_CACHE["timestamp"] = now
+            _SPOT_CACHE["data"] = snapshot
+        return snapshot
+    except Exception as e:
+        # 网络抖动时，优先返回缓存，避免调用方整体失败
+        if isinstance(cached, pd.DataFrame) and not cached.empty:
+            print(f"获取实时快照失败，回退使用缓存数据: {e}")
+            return cached
+        print(f"获取实时快照失败且无缓存可用: {e}")
+        return pd.DataFrame()
 
 
 def _normalize_industry_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -104,26 +110,6 @@ def get_stock_info(symbol: str) -> Dict[str, Any]:
         股票信息字典
     """
     try:
-        try:
-            # region agent log
-            os.makedirs("/opt/cursor/logs", exist_ok=True)
-            open("/opt/cursor/logs/debug.log", "a", encoding="utf-8").write(
-                json.dumps(
-                    {
-                        "hypothesisId": "A",
-                        "location": "akshare_utils.py:24",
-                        "message": "get_stock_info_entry",
-                        "data": {"symbol": symbol},
-                        "timestamp": int(datetime.datetime.now().timestamp() * 1000),
-                    },
-                    ensure_ascii=False,
-                )
-                + "\n"
-            )
-            # endregion
-        except Exception:
-            pass
-
         # 获取股票基本信息
         stock_info = _call_with_retry(ak.stock_individual_info_em, max_retries=2, base_delay=0.8, symbol=symbol)
         
@@ -139,31 +125,15 @@ def get_stock_info(symbol: str) -> Dict[str, Any]:
         try:
             # 获取A股实时行情
             realtime_data = get_stock_realtime_snapshot(ttl_seconds=30)
-            try:
-                # region agent log
-                os.makedirs("/opt/cursor/logs", exist_ok=True)
-                open("/opt/cursor/logs/debug.log", "a", encoding="utf-8").write(
-                    json.dumps(
-                        {
-                            "hypothesisId": "A",
-                            "location": "akshare_utils.py:39",
-                            "message": "stock_zh_a_spot_em_fetched",
-                            "data": {"symbol": symbol, "rows": int(len(realtime_data))},
-                            "timestamp": int(datetime.datetime.now().timestamp() * 1000),
-                        },
-                        ensure_ascii=False,
-                    )
-                    + "\n"
-                )
-                # endregion
-            except Exception:
-                pass
             
             # 只在调试时输出列名
             # print(f"实时行情数据列: {realtime_data.columns.tolist()}")
             
             # 过滤指定股票
-            realtime_data = realtime_data[realtime_data['代码'] == symbol]
+            if not realtime_data.empty and "代码" in realtime_data.columns:
+                realtime_data = realtime_data[realtime_data['代码'] == symbol]
+            else:
+                realtime_data = pd.DataFrame()
             
             if not realtime_data.empty:
                 # 安全获取最新价
@@ -227,12 +197,15 @@ def get_stock_history(symbol: str, period: str = "daily",
             start_date = (datetime.datetime.now() - datetime.timedelta(days=365)).strftime("%Y%m%d")
             
         # 调用AKShare获取A股历史数据
-        df = ak.stock_zh_a_hist(
-            symbol=symbol, 
-            period=period, 
-            start_date=start_date, 
-            end_date=end_date, 
-            adjust=adjust
+        df = _call_with_retry(
+            ak.stock_zh_a_hist,
+            max_retries=1,
+            base_delay=0.6,
+            symbol=symbol,
+            period=period,
+            start_date=start_date,
+            end_date=end_date,
+            adjust=adjust,
         )
         
         if df.empty:
@@ -274,10 +247,14 @@ def get_stock_realtime_quote(symbol: str) -> Dict[str, Any]:
         股票实时行情字典
     """
     try:
-        # 获取A股实时行情
-        df = ak.stock_zh_a_spot_em()
+        # 获取A股实时行情（使用带缓存与重试的快照）
+        df = get_stock_realtime_snapshot(ttl_seconds=30)
+        if df.empty:
+            return {"error": "实时行情数据不可用"}
         
         # 过滤指定股票
+        if '代码' not in df.columns:
+            return {"error": "实时行情数据缺少代码列"}
         df = df[df['代码'] == symbol]
         
         if df.empty:
@@ -335,7 +312,12 @@ def get_stock_financial_indicator(symbol: str) -> pd.DataFrame:
     """
     try:
         # 获取财务指标
-        df = ak.stock_financial_analysis_indicator(symbol=symbol)
+        df = _call_with_retry(
+            ak.stock_financial_analysis_indicator,
+            max_retries=1,
+            base_delay=0.6,
+            symbol=symbol,
+        )
         
         return df
     except Exception as e:
@@ -655,26 +637,6 @@ def get_stock_industry_constituents(industry_code: str) -> pd.DataFrame:
     df = _normalize_constituents(df)
 
     # 如果市盈率列为空，尝试获取个股数据
-    nan_pe_count = int(df['市盈率'].isna().sum()) if '市盈率' in df.columns else 0
-    try:
-        # region agent log
-        os.makedirs("/opt/cursor/logs", exist_ok=True)
-        open("/opt/cursor/logs/debug.log", "a", encoding="utf-8").write(
-            json.dumps(
-                {
-                    "hypothesisId": "C",
-                    "location": "akshare_utils.py:520",
-                    "message": "industry_constituents_pre_pe_backfill",
-                    "data": {"industry_code": industry_code, "rows": int(len(df)), "nan_pe_count": nan_pe_count},
-                    "timestamp": int(datetime.datetime.now().timestamp() * 1000),
-                },
-                ensure_ascii=False,
-            )
-            + "\n"
-        )
-        # endregion
-    except Exception:
-        pass
     indicator_calls = 0
     if '市盈率' in df.columns and df['市盈率'].isna().any():
         missing_pe_idx = df[df['市盈率'].isna()].index.tolist()
@@ -693,25 +655,8 @@ def get_stock_industry_constituents(industry_code: str) -> pd.DataFrame:
             df.loc[missing_pe_idx[max_backfill_calls:], '市盈率'] = df.loc[
                 missing_pe_idx[max_backfill_calls:], '市盈率'
             ].fillna(0.0)
-    try:
-        # region agent log
-        os.makedirs("/opt/cursor/logs", exist_ok=True)
-        open("/opt/cursor/logs/debug.log", "a", encoding="utf-8").write(
-            json.dumps(
-                {
-                    "hypothesisId": "C",
-                    "location": "akshare_utils.py:531",
-                    "message": "industry_constituents_post_pe_backfill",
-                    "data": {"industry_code": industry_code, "indicator_calls": indicator_calls},
-                    "timestamp": int(datetime.datetime.now().timestamp() * 1000),
-                },
-                ensure_ascii=False,
-            )
-            + "\n"
-        )
-        # endregion
-    except Exception:
-        pass
+    if indicator_calls > 0:
+        print(f"行业 {industry_code} 成分股市盈率补齐调用次数: {indicator_calls}")
 
     # 选择需要的列并填充缺省值
     df = df[list(required_columns.keys())]

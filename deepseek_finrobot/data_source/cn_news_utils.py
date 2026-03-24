@@ -6,8 +6,6 @@ import akshare as ak
 import pandas as pd
 from typing import Dict, List, Optional, Union, Any
 import datetime
-import json
-import os
 import re
 import time
 import requests
@@ -350,25 +348,6 @@ def get_stock_market_sentiment() -> Dict[str, Any]:
         if isinstance(cached_data, dict) and (time.time() - cached_ts) < cache_ttl_seconds:
             return dict(cached_data)
 
-        try:
-            # region agent log
-            os.makedirs("/opt/cursor/logs", exist_ok=True)
-            open("/opt/cursor/logs/debug.log", "a", encoding="utf-8").write(
-                json.dumps(
-                    {
-                        "hypothesisId": "B",
-                        "location": "cn_news_utils.py:314",
-                        "message": "get_stock_market_sentiment_entry",
-                        "data": {},
-                        "timestamp": int(datetime.datetime.now().timestamp() * 1000),
-                    },
-                    ensure_ascii=False,
-                )
-                + "\n"
-            )
-            # endregion
-        except Exception:
-            pass
 
         result = {}
         api_success = False  # 标记是否有API调用成功
@@ -483,31 +462,6 @@ def get_stock_market_sentiment() -> Dict[str, Any]:
                     north_api_failures += 1
                     print(f"尝试API {api_name} 失败: {api_e}")
                     continue
-            try:
-                # region agent log
-                os.makedirs("/opt/cursor/logs", exist_ok=True)
-                open("/opt/cursor/logs/debug.log", "a", encoding="utf-8").write(
-                    json.dumps(
-                        {
-                            "hypothesisId": "B",
-                            "location": "cn_news_utils.py:430",
-                            "message": "north_flow_api_attempt_summary",
-                            "data": {
-                                "attempts": north_api_attempts,
-                                "failures": north_api_failures,
-                                "api_found": api_found,
-                                "selected_api": north_selected_api,
-                            },
-                            "timestamp": int(datetime.datetime.now().timestamp() * 1000),
-                        },
-                        ensure_ascii=False,
-                    )
-                    + "\n"
-                )
-                # endregion
-            except Exception:
-                pass
-                
             if api_found and not north_data.empty:
                 # 确定关键列
                 date_col = None

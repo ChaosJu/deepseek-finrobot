@@ -7,7 +7,6 @@ from __future__ import annotations
 import datetime
 import json
 import math
-import os
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -312,26 +311,6 @@ class StockSelectorAgent:
         """
         多因子智能选股。
         """
-        try:
-            # region agent log
-            os.makedirs("/opt/cursor/logs", exist_ok=True)
-            open("/opt/cursor/logs/debug.log", "a", encoding="utf-8").write(
-                json.dumps(
-                    {
-                        "hypothesisId": "A",
-                        "location": "selection_agent.py:302",
-                        "message": "select_stocks_entry",
-                        "data": {"input_symbol_count": len(symbols), "top_n": top_n},
-                        "timestamp": int(datetime.datetime.now().timestamp() * 1000),
-                    },
-                    ensure_ascii=False,
-                )
-                + "\n"
-            )
-            # endregion
-        except Exception:
-            pass
-
         unique_symbols = []
         seen = set()
         for s in symbols:
@@ -350,26 +329,6 @@ class StockSelectorAgent:
                 m = None
             if m:
                 metrics.append(m)
-            try:
-                # region agent log
-                os.makedirs("/opt/cursor/logs", exist_ok=True)
-                open("/opt/cursor/logs/debug.log", "a", encoding="utf-8").write(
-                    json.dumps(
-                        {
-                            "hypothesisId": "A",
-                            "location": "selection_agent.py:323",
-                            "message": "collect_symbol_metrics_result",
-                            "data": {"symbol": symbol, "success": bool(m)},
-                            "timestamp": int(datetime.datetime.now().timestamp() * 1000),
-                        },
-                        ensure_ascii=False,
-                    )
-                    + "\n"
-                )
-                # endregion
-            except Exception:
-                pass
-
         if not metrics:
             return {
                 "error": "没有可用的候选股票数据，请检查候选池或稍后重试。",
