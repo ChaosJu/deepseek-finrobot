@@ -7,6 +7,7 @@ from __future__ import annotations
 import datetime
 import json
 import math
+import os
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -313,6 +314,7 @@ class StockSelectorAgent:
         """
         try:
             # region agent log
+            os.makedirs("/opt/cursor/logs", exist_ok=True)
             open("/opt/cursor/logs/debug.log", "a", encoding="utf-8").write(
                 json.dumps(
                     {
@@ -345,6 +347,7 @@ class StockSelectorAgent:
                 metrics.append(m)
             try:
                 # region agent log
+                os.makedirs("/opt/cursor/logs", exist_ok=True)
                 open("/opt/cursor/logs/debug.log", "a", encoding="utf-8").write(
                     json.dumps(
                         {

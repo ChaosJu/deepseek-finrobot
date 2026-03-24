@@ -7,6 +7,7 @@ import pandas as pd
 from typing import Dict, List, Optional, Union, Any
 import datetime
 import json
+import os
 import re
 import requests
 from bs4 import BeautifulSoup
@@ -315,6 +316,7 @@ def get_stock_market_sentiment() -> Dict[str, Any]:
     try:
         try:
             # region agent log
+            os.makedirs("/opt/cursor/logs", exist_ok=True)
             open("/opt/cursor/logs/debug.log", "a", encoding="utf-8").write(
                 json.dumps(
                     {
@@ -470,6 +472,7 @@ def get_stock_market_sentiment() -> Dict[str, Any]:
                     continue
             try:
                 # region agent log
+                os.makedirs("/opt/cursor/logs", exist_ok=True)
                 open("/opt/cursor/logs/debug.log", "a", encoding="utf-8").write(
                     json.dumps(
                         {

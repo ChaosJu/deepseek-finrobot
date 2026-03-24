@@ -25,6 +25,7 @@ def get_stock_info(symbol: str) -> Dict[str, Any]:
     try:
         try:
             # region agent log
+            os.makedirs("/opt/cursor/logs", exist_ok=True)
             open("/opt/cursor/logs/debug.log", "a", encoding="utf-8").write(
                 json.dumps(
                     {
@@ -59,6 +60,7 @@ def get_stock_info(symbol: str) -> Dict[str, Any]:
             realtime_data = ak.stock_zh_a_spot_em()
             try:
                 # region agent log
+                os.makedirs("/opt/cursor/logs", exist_ok=True)
                 open("/opt/cursor/logs/debug.log", "a", encoding="utf-8").write(
                     json.dumps(
                         {
@@ -558,6 +560,7 @@ def get_stock_industry_constituents(industry_code: str) -> pd.DataFrame:
         nan_pe_count = int(df['市盈率'].isna().sum()) if '市盈率' in df.columns else 0
         try:
             # region agent log
+            os.makedirs("/opt/cursor/logs", exist_ok=True)
             open("/opt/cursor/logs/debug.log", "a", encoding="utf-8").write(
                 json.dumps(
                     {
@@ -586,6 +589,7 @@ def get_stock_industry_constituents(industry_code: str) -> pd.DataFrame:
                     df.at[idx, '市盈率'] = 0.0
         try:
             # region agent log
+            os.makedirs("/opt/cursor/logs", exist_ok=True)
             open("/opt/cursor/logs/debug.log", "a", encoding="utf-8").write(
                 json.dumps(
                     {
