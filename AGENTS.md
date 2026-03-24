@@ -32,7 +32,21 @@ python3 -m deepseek_finrobot.cli --help
 
 Full CLI commands (predict, industry, portfolio, etc.) require a valid `DEEPSEEK_API_KEY` in either the environment or `config_api_keys.json` at project root (copy from `config_api_keys_sample`).
 
+**Important**: The CLI's `predict` command (and other agent commands) uses AutoGen's conversation loop, which may run for many minutes due to auto-reply behavior. For quick validation, use the Python API directly (e.g. `get_completion()` from `deepseek_finrobot.openai_adapter`).
+
+### CLI config_api_keys.json setup
+
+The CLI requires `config_api_keys.json` at the project root. If `DEEPSEEK_API_KEY` is set in the environment, create it with:
+
+```python
+import json, os
+with open('config_api_keys.json', 'w') as f:
+    json.dump({'DEEPSEEK_API_KEY': os.environ['DEEPSEEK_API_KEY']}, f)
+```
+
+Remember to delete this file before committing (it's not gitignored).
+
 ### External dependencies
 
 - **DeepSeek API**: Requires `DEEPSEEK_API_KEY` for any LLM-powered agent functionality.
-- **AKShare**: Fetches live Chinese financial data from public APIs (no key needed, but requires internet access). Some endpoints may transiently fail; the code has fallback logic.
+- **AKShare**: Fetches live Chinese financial data from public APIs (no key needed, but requires internet access). The primary `akshare` endpoint for industry lists sometimes fails with `RemoteDisconnected`; the code has built-in fallback logic that usually succeeds on retry.
