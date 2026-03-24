@@ -603,100 +603,124 @@ def get_stock_industry_constituents(industry_code: str) -> pd.DataFrame:
     :param industry_code: 行业代码
     :return: 成分股数据
     """
-    try:
-        # 使用东方财富行业成分股接口
-        df = _call_with_retry(ak.stock_board_industry_cons_em, max_retries=2, base_delay=0.8, symbol=industry_code)
-        
-        # 确保必要的列存在
-        required_columns = {
-            '代码': str,
-            '名称': str,
-            '最新价': float,
-            '涨跌幅': float,
-            '市盈率': float,
-            '市净率': float
-        }
-        
-        # 重命名列（如果需要）
+    required_columns = {
+        '代码': str,
+        '名称': str,
+        '最新价': float,
+        '涨跌幅': float,
+        '市盈率': float,
+        '市净率': float
+    }
+
+    def _normalize_constituents(df: pd.DataFrame) -> pd.DataFrame:
         rename_map = {
             '股票代码': '代码',
             '股票名称': '名称',
-            '市盈率-动态': '市盈率'
+            '市盈率-动态': '市盈率',
+            'code': '代码',
+            'name': '名称',
+            'trade': '最新价',
+            'changepercent': '涨跌幅',
+            'per': '市盈率',
+            'pb': '市净率',
         }
         df = df.rename(columns=rename_map)
-        
-        # 添加缺失的列并设置默认值
+
         for col, dtype in required_columns.items():
             if col not in df.columns:
-                df[col] = dtype(0)
-            df[col] = df[col].astype(dtype)
-            
-        # 如果市盈率列为空，尝试获取个股数据
-        nan_pe_count = int(df['市盈率'].isna().sum()) if '市盈率' in df.columns else 0
-        try:
-            # region agent log
-            os.makedirs("/opt/cursor/logs", exist_ok=True)
-            open("/opt/cursor/logs/debug.log", "a", encoding="utf-8").write(
-                json.dumps(
-                    {
-                        "hypothesisId": "C",
-                        "location": "akshare_utils.py:520",
-                        "message": "industry_constituents_pre_pe_backfill",
-                        "data": {"industry_code": industry_code, "rows": int(len(df)), "nan_pe_count": nan_pe_count},
-                        "timestamp": int(datetime.datetime.now().timestamp() * 1000),
-                    },
-                    ensure_ascii=False,
-                )
-                + "\n"
-            )
-            # endregion
-        except Exception:
-            pass
-        indicator_calls = 0
-        if '市盈率' in df.columns and df['市盈率'].isna().any():
-            missing_pe_idx = df[df['市盈率'].isna()].index.tolist()
-            # 限制补齐请求数量，避免大行业触发N+1网络风暴
-            max_backfill_calls = 8
-            for idx in missing_pe_idx[:max_backfill_calls]:
-                try:
-                    indicator_calls += 1
-                    stock_code = str(df.at[idx, '代码'])
-                    stock_info = _call_with_retry(ak.stock_a_lg_indicator, max_retries=1, base_delay=0.6, symbol=stock_code)
-                    if not stock_info.empty and '市盈率' in stock_info.columns:
-                        df.at[idx, '市盈率'] = stock_info['市盈率'].iloc[0]
-                except:
-                    df.at[idx, '市盈率'] = 0.0
-            if len(missing_pe_idx) > max_backfill_calls:
-                df.loc[missing_pe_idx[max_backfill_calls:], '市盈率'] = df.loc[
-                    missing_pe_idx[max_backfill_calls:], '市盈率'
-                ].fillna(0.0)
-        try:
-            # region agent log
-            os.makedirs("/opt/cursor/logs", exist_ok=True)
-            open("/opt/cursor/logs/debug.log", "a", encoding="utf-8").write(
-                json.dumps(
-                    {
-                        "hypothesisId": "C",
-                        "location": "akshare_utils.py:531",
-                        "message": "industry_constituents_post_pe_backfill",
-                        "data": {"industry_code": industry_code, "indicator_calls": indicator_calls},
-                        "timestamp": int(datetime.datetime.now().timestamp() * 1000),
-                    },
-                    ensure_ascii=False,
-                )
-                + "\n"
-            )
-            # endregion
-        except Exception:
-            pass
-                    
-        # 选择需要的列
-        df = df[list(required_columns.keys())]
+                df[col] = np.nan if dtype is float else ""
+            if dtype is float:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+            else:
+                df[col] = df[col].astype(str)
+
         return df
-    except Exception as e:
-        print(f"获取行业成分股失败: {e}")
-        # 返回空DataFrame，但包含所需的列
-        return pd.DataFrame(columns=list(required_columns.keys()))
+
+    try:
+        # 使用东方财富行业成分股接口
+        df = _call_with_retry(ak.stock_board_industry_cons_em, max_retries=2, base_delay=0.8, symbol=industry_code)
+    except Exception as primary_e:
+        print(f"获取行业成分股失败: {primary_e}")
+        try:
+            # stock_sector_spot 返回的 hangye_* 标识可用 stock_sector_detail 获取成分股
+            if str(industry_code).startswith("hangye_"):
+                print("尝试使用 stock_sector_detail 作为行业成分股替代接口...")
+                df = _call_with_retry(ak.stock_sector_detail, max_retries=1, base_delay=0.6, sector=industry_code)
+            else:
+                raise
+        except Exception as fallback_e:
+            print(f"使用替代接口获取行业成分股失败: {fallback_e}")
+            return pd.DataFrame(columns=list(required_columns.keys()))
+
+    df = _normalize_constituents(df)
+
+    # 如果市盈率列为空，尝试获取个股数据
+    nan_pe_count = int(df['市盈率'].isna().sum()) if '市盈率' in df.columns else 0
+    try:
+        # region agent log
+        os.makedirs("/opt/cursor/logs", exist_ok=True)
+        open("/opt/cursor/logs/debug.log", "a", encoding="utf-8").write(
+            json.dumps(
+                {
+                    "hypothesisId": "C",
+                    "location": "akshare_utils.py:520",
+                    "message": "industry_constituents_pre_pe_backfill",
+                    "data": {"industry_code": industry_code, "rows": int(len(df)), "nan_pe_count": nan_pe_count},
+                    "timestamp": int(datetime.datetime.now().timestamp() * 1000),
+                },
+                ensure_ascii=False,
+            )
+            + "\n"
+        )
+        # endregion
+    except Exception:
+        pass
+    indicator_calls = 0
+    if '市盈率' in df.columns and df['市盈率'].isna().any():
+        missing_pe_idx = df[df['市盈率'].isna()].index.tolist()
+        # 限制补齐请求数量，避免大行业触发N+1网络风暴
+        max_backfill_calls = 8
+        for idx in missing_pe_idx[:max_backfill_calls]:
+            try:
+                indicator_calls += 1
+                stock_code = str(df.at[idx, '代码'])
+                stock_info = _call_with_retry(ak.stock_a_lg_indicator, max_retries=1, base_delay=0.6, symbol=stock_code)
+                if not stock_info.empty and '市盈率' in stock_info.columns:
+                    df.at[idx, '市盈率'] = stock_info['市盈率'].iloc[0]
+            except Exception:
+                df.at[idx, '市盈率'] = 0.0
+        if len(missing_pe_idx) > max_backfill_calls:
+            df.loc[missing_pe_idx[max_backfill_calls:], '市盈率'] = df.loc[
+                missing_pe_idx[max_backfill_calls:], '市盈率'
+            ].fillna(0.0)
+    try:
+        # region agent log
+        os.makedirs("/opt/cursor/logs", exist_ok=True)
+        open("/opt/cursor/logs/debug.log", "a", encoding="utf-8").write(
+            json.dumps(
+                {
+                    "hypothesisId": "C",
+                    "location": "akshare_utils.py:531",
+                    "message": "industry_constituents_post_pe_backfill",
+                    "data": {"industry_code": industry_code, "indicator_calls": indicator_calls},
+                    "timestamp": int(datetime.datetime.now().timestamp() * 1000),
+                },
+                ensure_ascii=False,
+            )
+            + "\n"
+        )
+        # endregion
+    except Exception:
+        pass
+
+    # 选择需要的列并填充缺省值
+    df = df[list(required_columns.keys())]
+    for col, dtype in required_columns.items():
+        if dtype is float:
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
+        else:
+            df[col] = df[col].fillna("").astype(str)
+    return df
 
 def get_stock_concept_constituents(concept_code: str) -> pd.DataFrame:
     """
