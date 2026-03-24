@@ -83,7 +83,7 @@ pip install -e .                 # 以开发模式安装项目本身
 项目依赖以下主要包：
 
 - **openai>=1.72.0** - OpenAI API客户端，用于与DeepSeek API交互
-- **pyautogen>=0.8.5** - AutoGen框架，用于构建AI代理
+- **pyautogen==0.2.35** - 锁定到提供 `autogen` 模块的稳定版本（与当前代理实现兼容）
 - **pandas & numpy** - 数据处理核心组件
 - **matplotlib>=3.10.0** - 用于数据可视化
 - **akshare>=1.16.0** - 中国金融数据接口
@@ -243,6 +243,12 @@ python -m deepseek_finrobot.cli industry 银行 --days 30 --export（已经测�
 
 # 分析财经新闻
 python -m deepseek_finrobot.cli news 人工智能 --days 3 --limit 10 （未测试）
+
+# 智能选股（多因子，候选池手动指定）
+python -m deepseek_finrobot.cli select --stocks 000001,600036,600519,000858 --top 3 --risk 中等 --horizon 中期
+
+# 智能选股（按行业自动扩展候选池 + AutoGen多代理共识）
+python -m deepseek_finrobot.cli select --industry-name 银行 --top 5 --risk 保守 --horizon 长期 --consensus
 ```
 
 ## 直接使用DeepSeek API适配器

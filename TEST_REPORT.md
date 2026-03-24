@@ -10,7 +10,7 @@
 - **Python版本**: 3.13
 - **依赖包**: 
   - openai>=1.72.0
-  - pyautogen>=0.8.5
+  - pyautogen==0.2.35
   - requests>=2.31.0
   - pandas
   - numpy

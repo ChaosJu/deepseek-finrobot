@@ -8,8 +8,96 @@ import numpy as np
 import matplotlib.pyplot as plt
 from typing import Dict, List, Optional, Union, Any
 import datetime
-import os
+import time
 import pypinyin
+
+
+_SPOT_CACHE: Dict[str, Any] = {"timestamp": 0.0, "data": None}
+
+
+def _is_retryable_network_error(error: Exception) -> bool:
+    text = str(error)
+    retry_signals = (
+        "RemoteDisconnected",
+        "Connection aborted",
+        "Read timed out",
+        "ConnectTimeout",
+        "ConnectionResetError",
+        "Max retries exceeded",
+    )
+    return any(signal in text for signal in retry_signals)
+
+
+def _call_with_retry(func, max_retries: int = 2, base_delay: float = 0.8, **kwargs):
+    last_error = None
+    for attempt in range(max_retries + 1):
+        try:
+            return func(**kwargs)
+        except Exception as error:
+            last_error = error
+            if attempt >= max_retries or not _is_retryable_network_error(error):
+                raise
+            time.sleep(base_delay * (2**attempt))
+    raise last_error
+
+
+def get_stock_realtime_snapshot(ttl_seconds: int = 30, force_refresh: bool = False) -> pd.DataFrame:
+    """
+    获取A股实时快照（带短TTL缓存），避免高频重复请求导致网络抖动。
+    """
+    now = time.time()
+    cached = _SPOT_CACHE.get("data")
+    if (
+        not force_refresh
+        and isinstance(cached, pd.DataFrame)
+        and not cached.empty
+        and (now - float(_SPOT_CACHE.get("timestamp", 0.0))) < ttl_seconds
+    ):
+        return cached
+
+    try:
+        snapshot = _call_with_retry(ak.stock_zh_a_spot_em, max_retries=2, base_delay=0.8)
+        if isinstance(snapshot, pd.DataFrame) and not snapshot.empty:
+            _SPOT_CACHE["timestamp"] = now
+            _SPOT_CACHE["data"] = snapshot
+        return snapshot
+    except Exception as e:
+        # 网络抖动时，优先返回缓存，避免调用方整体失败
+        if isinstance(cached, pd.DataFrame) and not cached.empty:
+            print(f"获取实时快照失败，回退使用缓存数据: {e}")
+            return cached
+        print(f"获取实时快照失败且无缓存可用: {e}")
+        return pd.DataFrame()
+
+
+def _normalize_industry_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    统一行业列表列名，确保至少包含：板块名称、板块代码。
+    """
+    if df is None or df.empty:
+        return df
+
+    rename_map: Dict[str, str] = {}
+    if "板块名称" not in df.columns:
+        for candidate in ["板块名", "名称", "板块"]:
+            if candidate in df.columns:
+                rename_map[candidate] = "板块名称"
+                break
+    if "板块代码" not in df.columns:
+        for candidate in ["label", "代码", "板块ID", "股票代码"]:
+            if candidate in df.columns:
+                rename_map[candidate] = "板块代码"
+                break
+
+    if rename_map:
+        df = df.rename(columns=rename_map)
+
+    if "板块名称" not in df.columns:
+        df["板块名称"] = "未知行业"
+    if "板块代码" not in df.columns:
+        df["板块代码"] = ""
+
+    return df
 
 def get_stock_info(symbol: str) -> Dict[str, Any]:
     """
@@ -23,7 +111,7 @@ def get_stock_info(symbol: str) -> Dict[str, Any]:
     """
     try:
         # 获取股票基本信息
-        stock_info = ak.stock_individual_info_em(symbol=symbol)
+        stock_info = _call_with_retry(ak.stock_individual_info_em, max_retries=2, base_delay=0.8, symbol=symbol)
         
         if stock_info.empty:
             return {"error": "未找到股票信息"}
@@ -36,13 +124,16 @@ def get_stock_info(symbol: str) -> Dict[str, Any]:
         # 补充获取实时行情数据
         try:
             # 获取A股实时行情
-            realtime_data = ak.stock_zh_a_spot_em()
+            realtime_data = get_stock_realtime_snapshot(ttl_seconds=30)
             
             # 只在调试时输出列名
             # print(f"实时行情数据列: {realtime_data.columns.tolist()}")
             
             # 过滤指定股票
-            realtime_data = realtime_data[realtime_data['代码'] == symbol]
+            if not realtime_data.empty and "代码" in realtime_data.columns:
+                realtime_data = realtime_data[realtime_data['代码'] == symbol]
+            else:
+                realtime_data = pd.DataFrame()
             
             if not realtime_data.empty:
                 # 安全获取最新价
@@ -106,12 +197,15 @@ def get_stock_history(symbol: str, period: str = "daily",
             start_date = (datetime.datetime.now() - datetime.timedelta(days=365)).strftime("%Y%m%d")
             
         # 调用AKShare获取A股历史数据
-        df = ak.stock_zh_a_hist(
-            symbol=symbol, 
-            period=period, 
-            start_date=start_date, 
-            end_date=end_date, 
-            adjust=adjust
+        df = _call_with_retry(
+            ak.stock_zh_a_hist,
+            max_retries=1,
+            base_delay=0.6,
+            symbol=symbol,
+            period=period,
+            start_date=start_date,
+            end_date=end_date,
+            adjust=adjust,
         )
         
         if df.empty:
@@ -153,10 +247,14 @@ def get_stock_realtime_quote(symbol: str) -> Dict[str, Any]:
         股票实时行情字典
     """
     try:
-        # 获取A股实时行情
-        df = ak.stock_zh_a_spot_em()
+        # 获取A股实时行情（使用带缓存与重试的快照）
+        df = get_stock_realtime_snapshot(ttl_seconds=30)
+        if df.empty:
+            return {"error": "实时行情数据不可用"}
         
         # 过滤指定股票
+        if '代码' not in df.columns:
+            return {"error": "实时行情数据缺少代码列"}
         df = df[df['代码'] == symbol]
         
         if df.empty:
@@ -214,7 +312,12 @@ def get_stock_financial_indicator(symbol: str) -> pd.DataFrame:
     """
     try:
         # 获取财务指标
-        df = ak.stock_financial_analysis_indicator(symbol=symbol)
+        df = _call_with_retry(
+            ak.stock_financial_analysis_indicator,
+            max_retries=1,
+            base_delay=0.6,
+            symbol=symbol,
+        )
         
         return df
     except Exception as e:
@@ -417,15 +520,10 @@ def get_stock_industry_list() -> pd.DataFrame:
     """
     try:
         # 获取行业列表
-        df = ak.stock_board_industry_name_em()
+        df = _call_with_retry(ak.stock_board_industry_name_em, max_retries=2, base_delay=0.8)
         
         # 确保列名一致性
-        if '板块名称' not in df.columns and '板块名' in df.columns:
-            df = df.rename(columns={'板块名': '板块名称'})
-        if '板块名称' not in df.columns and '名称' in df.columns:
-            df = df.rename(columns={'名称': '板块名称'})
-        if '板块代码' not in df.columns and '代码' in df.columns:
-            df = df.rename(columns={'代码': '板块代码'})
+        df = _normalize_industry_columns(df)
             
         print(f"成功获取行业列表，共找到 {len(df)} 个行业")
         return df
@@ -435,11 +533,10 @@ def get_stock_industry_list() -> pd.DataFrame:
         try:
             # 尝试使用板块行情接口
             print("尝试使用替代接口获取行业列表...")
-            df = ak.stock_sector_spot(indicator="行业")
+            df = _call_with_retry(ak.stock_sector_spot, max_retries=2, base_delay=0.8, indicator="行业")
             
             # 重命名列以匹配原来的接口
-            if '板块名称' not in df.columns and '板块' in df.columns:
-                df = df.rename(columns={'板块': '板块名称'})
+            df = _normalize_industry_columns(df)
                 
             print(f"成功使用替代接口获取行业列表，共找到 {len(df)} 个行业")
             return df
@@ -488,51 +585,87 @@ def get_stock_industry_constituents(industry_code: str) -> pd.DataFrame:
     :param industry_code: 行业代码
     :return: 成分股数据
     """
-    try:
-        # 使用东方财富行业成分股接口
-        df = ak.stock_board_industry_cons_em(symbol=industry_code)
-        
-        # 确保必要的列存在
-        required_columns = {
-            '代码': str,
-            '名称': str,
-            '最新价': float,
-            '涨跌幅': float,
-            '市盈率': float,
-            '市净率': float
-        }
-        
-        # 重命名列（如果需要）
+    required_columns = {
+        '代码': str,
+        '名称': str,
+        '最新价': float,
+        '涨跌幅': float,
+        '市盈率': float,
+        '市净率': float
+    }
+
+    def _normalize_constituents(df: pd.DataFrame) -> pd.DataFrame:
         rename_map = {
             '股票代码': '代码',
             '股票名称': '名称',
-            '市盈率-动态': '市盈率'
+            '市盈率-动态': '市盈率',
+            'code': '代码',
+            'name': '名称',
+            'trade': '最新价',
+            'changepercent': '涨跌幅',
+            'per': '市盈率',
+            'pb': '市净率',
         }
         df = df.rename(columns=rename_map)
-        
-        # 添加缺失的列并设置默认值
+
         for col, dtype in required_columns.items():
             if col not in df.columns:
-                df[col] = dtype(0)
-            df[col] = df[col].astype(dtype)
-            
-        # 如果市盈率列为空，尝试获取个股数据
-        if '市盈率' in df.columns and df['市盈率'].isna().any():
-            for idx, row in df.iterrows():
-                try:
-                    stock_info = ak.stock_a_lg_indicator(symbol=row['代码'])
-                    if not stock_info.empty and '市盈率' in stock_info.columns:
-                        df.at[idx, '市盈率'] = stock_info['市盈率'].iloc[0]
-                except:
-                    df.at[idx, '市盈率'] = 0.0
-                    
-        # 选择需要的列
-        df = df[list(required_columns.keys())]
+                df[col] = np.nan if dtype is float else ""
+            if dtype is float:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+            else:
+                df[col] = df[col].astype(str)
+
         return df
-    except Exception as e:
-        print(f"获取行业成分股失败: {e}")
-        # 返回空DataFrame，但包含所需的列
-        return pd.DataFrame(columns=list(required_columns.keys()))
+
+    try:
+        # 使用东方财富行业成分股接口
+        df = _call_with_retry(ak.stock_board_industry_cons_em, max_retries=2, base_delay=0.8, symbol=industry_code)
+    except Exception as primary_e:
+        print(f"获取行业成分股失败: {primary_e}")
+        try:
+            # stock_sector_spot 返回的 hangye_* 标识可用 stock_sector_detail 获取成分股
+            if str(industry_code).startswith("hangye_"):
+                print("尝试使用 stock_sector_detail 作为行业成分股替代接口...")
+                df = _call_with_retry(ak.stock_sector_detail, max_retries=1, base_delay=0.6, sector=industry_code)
+            else:
+                raise
+        except Exception as fallback_e:
+            print(f"使用替代接口获取行业成分股失败: {fallback_e}")
+            return pd.DataFrame(columns=list(required_columns.keys()))
+
+    df = _normalize_constituents(df)
+
+    # 如果市盈率列为空，尝试获取个股数据
+    indicator_calls = 0
+    if '市盈率' in df.columns and df['市盈率'].isna().any():
+        missing_pe_idx = df[df['市盈率'].isna()].index.tolist()
+        # 限制补齐请求数量，避免大行业触发N+1网络风暴
+        max_backfill_calls = 8
+        for idx in missing_pe_idx[:max_backfill_calls]:
+            try:
+                indicator_calls += 1
+                stock_code = str(df.at[idx, '代码'])
+                stock_info = _call_with_retry(ak.stock_a_lg_indicator, max_retries=1, base_delay=0.6, symbol=stock_code)
+                if not stock_info.empty and '市盈率' in stock_info.columns:
+                    df.at[idx, '市盈率'] = stock_info['市盈率'].iloc[0]
+            except Exception:
+                df.at[idx, '市盈率'] = 0.0
+        if len(missing_pe_idx) > max_backfill_calls:
+            df.loc[missing_pe_idx[max_backfill_calls:], '市盈率'] = df.loc[
+                missing_pe_idx[max_backfill_calls:], '市盈率'
+            ].fillna(0.0)
+    if indicator_calls > 0:
+        print(f"行业 {industry_code} 成分股市盈率补齐调用次数: {indicator_calls}")
+
+    # 选择需要的列并填充缺省值
+    df = df[list(required_columns.keys())]
+    for col, dtype in required_columns.items():
+        if dtype is float:
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
+        else:
+            df[col] = df[col].fillna("").astype(str)
+    return df
 
 def get_stock_concept_constituents(concept_code: str) -> pd.DataFrame:
     """

@@ -120,7 +120,7 @@ def get_chat_completion(
 
 def get_llm_config_for_autogen(api_key: Optional[str] = None, **kwargs) -> Dict[str, Any]:
     """
-    获取适用于autogen的LLM配置 (兼容新版autogen)
+    获取适用于autogen的LLM配置 (兼容当前项目使用的 v0.2 接口)
     
     Args:
         api_key: DeepSeek API密钥，如果为None则使用环境变量
@@ -142,7 +142,7 @@ def get_llm_config_for_autogen(api_key: Optional[str] = None, **kwargs) -> Dict[
         "model": kwargs.get("model", "deepseek-chat"),
     }
     
-    # 构建配置列表 (适配新版autogen)
+    # 构建配置列表 (适配当前项目使用的 autogen v0.2 风格)
     base_url = kwargs.get("base_url", "https://api.deepseek.com/v1")
     config_list = [{
         "model": config["model"],

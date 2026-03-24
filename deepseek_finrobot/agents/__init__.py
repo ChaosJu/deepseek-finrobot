@@ -3,6 +3,7 @@
 """
 
 from .agent_library import MarketForecasterAgent, FinancialReportAgent, NewsAnalysisAgent, IndustryAnalysisAgent, PortfolioManagerAgent, TechnicalAnalysisAgent
+from .selection_agent import StockSelectorAgent
 from .workflow import SingleAssistant, SingleAssistantShadow, MultiAgentWorkflow
 
 __all__ = [
@@ -12,6 +13,7 @@ __all__ = [
     'IndustryAnalysisAgent',
     'PortfolioManagerAgent',
     'TechnicalAnalysisAgent',
+    'StockSelectorAgent',
     'SingleAssistant',
     'SingleAssistantShadow',
     'MultiAgentWorkflow'
