@@ -7,7 +7,16 @@ import sys
 import os
 import json
 from typing import Dict, Any, List, Optional
-from .agents import MarketForecasterAgent, FinancialReportAgent, NewsAnalysisAgent, IndustryAnalysisAgent, PortfolioManagerAgent, TechnicalAnalysisAgent
+from .agents import (
+    MarketForecasterAgent,
+    FinancialReportAgent,
+    NewsAnalysisAgent,
+    IndustryAnalysisAgent,
+    PortfolioManagerAgent,
+    TechnicalAnalysisAgent,
+    StockSelectorAgent,
+)
+from .data_source import akshare_utils
 from .utils import get_current_date, get_deepseek_config, register_keys_from_json
 
 def load_config() -> Dict[str, Any]:
@@ -328,6 +337,93 @@ def technical_analyze(args):
             analyst.export_analysis(analysis, format=args.format, output_file=output_file)
             print(f"\n分析结果已导出到: {output_file}")
 
+def select_stocks(args):
+    """
+    智能选股：多因子评分 + 可选多代理共识
+
+    Args:
+        args: 命令行参数
+    """
+    llm_config = load_config()
+    selector = StockSelectorAgent(llm_config=llm_config)
+
+    candidate_symbols: List[str] = []
+
+    # 1) 手动传入股票池
+    if args.stocks:
+        candidate_symbols.extend([s.strip() for s in args.stocks.split(",") if s.strip()])
+
+    # 2) 行业代码扩展股票池
+    if args.industry_code:
+        industry_df = akshare_utils.get_stock_industry_constituents(args.industry_code)
+        if not industry_df.empty and "代码" in industry_df.columns:
+            candidate_symbols.extend(industry_df["代码"].astype(str).tolist())
+        else:
+            print(f"警告: 未能通过行业代码获取成分股: {args.industry_code}")
+
+    # 3) 行业名称扩展股票池（先查行业列表，再获取成分股）
+    if args.industry_name:
+        industry_list = akshare_utils.get_stock_industry_list()
+        matched_code = None
+        if not industry_list.empty and "板块名称" in industry_list.columns and "板块代码" in industry_list.columns:
+            for _, row in industry_list.iterrows():
+                if str(row["板块名称"]).strip() == args.industry_name:
+                    matched_code = str(row["板块代码"]).strip()
+                    break
+        if matched_code:
+            industry_df = akshare_utils.get_stock_industry_constituents(matched_code)
+            if not industry_df.empty and "代码" in industry_df.columns:
+                candidate_symbols.extend(industry_df["代码"].astype(str).tolist())
+            else:
+                print(f"警告: 行业名称 {args.industry_name} 对应行业代码 {matched_code}，但未获取到成分股。")
+        else:
+            print(f"警告: 未找到行业名称: {args.industry_name}")
+
+    # 4) 概念代码扩展股票池
+    if args.concept_code:
+        concept_df = akshare_utils.get_stock_concept_constituents(args.concept_code)
+        if not concept_df.empty:
+            code_col = "代码" if "代码" in concept_df.columns else ("股票代码" if "股票代码" in concept_df.columns else None)
+            if code_col:
+                candidate_symbols.extend(concept_df[code_col].astype(str).tolist())
+            else:
+                print(f"警告: 概念成分股数据缺少代码列: {args.concept_code}")
+        else:
+            print(f"警告: 未能通过概念代码获取成分股: {args.concept_code}")
+
+    # 去重
+    unique_candidates = []
+    seen = set()
+    for s in candidate_symbols:
+        symbol = str(s).strip()
+        if symbol and symbol not in seen:
+            seen.add(symbol)
+            unique_candidates.append(symbol)
+
+    if not unique_candidates:
+        print("错误: 未获得候选股票池，请至少提供 --stocks 或行业/概念参数。")
+        sys.exit(1)
+
+    print(f"候选股票数: {len(unique_candidates)}，开始执行智能选股...")
+
+    result = selector.select_stocks(
+        symbols=unique_candidates,
+        top_n=args.top,
+        risk_preference=args.risk,
+        investment_horizon=args.horizon,
+        max_per_industry=args.max_per_industry,
+        use_consensus=args.consensus,
+    )
+
+    report = selector.format_selection_report(result, top_show=args.top_show)
+    print("\n===== 智能选股结果 =====\n")
+    print(report)
+
+    if args.export:
+        output_file = f"stock_selection_{get_current_date()}.{args.format}"
+        exported = selector.export_selection_report(result, fmt=args.format, output_file=output_file)
+        print(f"\n选股报告已导出到: {exported}")
+
 def main():
     """
     主函数
@@ -406,6 +502,22 @@ def main():
     technical_parser.add_argument("--export", action="store_true", help="导出分析结果")
     technical_parser.add_argument("--format", choices=["markdown", "html", "text"], default="markdown", help="导出格式")
     technical_parser.set_defaults(func=technical_analyze)
+
+    # 智能选股
+    select_parser = subparsers.add_parser("select", help="智能选股（多因子评分 + 可选AutoGen多代理共识）")
+    select_parser.add_argument("--stocks", help="手动指定候选股票池，格式：000001,600519,...")
+    select_parser.add_argument("--industry-code", help="行业代码（如 BK0475），用于自动扩展候选池")
+    select_parser.add_argument("--industry-name", help="行业名称（如 银行），用于自动扩展候选池")
+    select_parser.add_argument("--concept-code", help="概念代码（如 BK0815），用于自动扩展候选池")
+    select_parser.add_argument("--top", type=int, default=5, help="最终入选股票数量")
+    select_parser.add_argument("--top-show", type=int, default=10, help="报告中展示的候选排名数量")
+    select_parser.add_argument("--risk", choices=["保守", "中等", "激进"], default="中等", help="风险偏好")
+    select_parser.add_argument("--horizon", choices=["短期", "中期", "长期"], default="长期", help="投资期限")
+    select_parser.add_argument("--max-per-industry", type=int, default=2, help="单一行业最多入选数量（0表示不限制）")
+    select_parser.add_argument("--consensus", action="store_true", help="启用AutoGen GroupChat多代理共识分析")
+    select_parser.add_argument("--export", action="store_true", help="导出选股报告")
+    select_parser.add_argument("--format", choices=["markdown", "html", "text"], default="markdown", help="导出格式")
+    select_parser.set_defaults(func=select_stocks)
     
     args = parser.parse_args()
     

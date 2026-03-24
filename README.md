@@ -243,6 +243,12 @@ python -m deepseek_finrobot.cli industry 银行 --days 30 --export（已经测�
 
 # 分析财经新闻
 python -m deepseek_finrobot.cli news 人工智能 --days 3 --limit 10 （未测试）
+
+# 智能选股（多因子，候选池手动指定）
+python -m deepseek_finrobot.cli select --stocks 000001,600036,600519,000858 --top 3 --risk 中等 --horizon 中期
+
+# 智能选股（按行业自动扩展候选池 + AutoGen多代理共识）
+python -m deepseek_finrobot.cli select --industry-name 银行 --top 5 --risk 保守 --horizon 长期 --consensus
 ```
 
 ## 直接使用DeepSeek API适配器
