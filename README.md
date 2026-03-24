@@ -83,7 +83,7 @@ pip install -e .                 # 以开发模式安装项目本身
 项目依赖以下主要包：
 
 - **openai>=1.72.0** - OpenAI API客户端，用于与DeepSeek API交互
-- **pyautogen>=0.8.5** - AutoGen框架，用于构建AI代理
+- **pyautogen==0.2.35** - 锁定到提供 `autogen` 模块的稳定版本（与当前代理实现兼容）
 - **pandas & numpy** - 数据处理核心组件
 - **matplotlib>=3.10.0** - 用于数据可视化
 - **akshare>=1.16.0** - 中国金融数据接口
