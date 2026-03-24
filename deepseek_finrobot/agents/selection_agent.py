@@ -311,6 +311,25 @@ class StockSelectorAgent:
         """
         多因子智能选股。
         """
+        try:
+            # region agent log
+            open("/opt/cursor/logs/debug.log", "a", encoding="utf-8").write(
+                json.dumps(
+                    {
+                        "hypothesisId": "A",
+                        "location": "selection_agent.py:302",
+                        "message": "select_stocks_entry",
+                        "data": {"input_symbol_count": len(symbols), "top_n": top_n},
+                        "timestamp": int(datetime.datetime.now().timestamp() * 1000),
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+            # endregion
+        except Exception:
+            pass
+
         unique_symbols = []
         seen = set()
         for s in symbols:
@@ -324,6 +343,24 @@ class StockSelectorAgent:
             m = self._collect_symbol_metrics(symbol)
             if m:
                 metrics.append(m)
+            try:
+                # region agent log
+                open("/opt/cursor/logs/debug.log", "a", encoding="utf-8").write(
+                    json.dumps(
+                        {
+                            "hypothesisId": "A",
+                            "location": "selection_agent.py:323",
+                            "message": "collect_symbol_metrics_result",
+                            "data": {"symbol": symbol, "success": bool(m)},
+                            "timestamp": int(datetime.datetime.now().timestamp() * 1000),
+                        },
+                        ensure_ascii=False,
+                    )
+                    + "\n"
+                )
+                # endregion
+            except Exception:
+                pass
 
         if not metrics:
             return {

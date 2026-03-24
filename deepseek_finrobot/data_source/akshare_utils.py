@@ -8,6 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from typing import Dict, List, Optional, Union, Any
 import datetime
+import json
 import os
 import pypinyin
 
@@ -22,6 +23,25 @@ def get_stock_info(symbol: str) -> Dict[str, Any]:
         股票信息字典
     """
     try:
+        try:
+            # region agent log
+            open("/opt/cursor/logs/debug.log", "a", encoding="utf-8").write(
+                json.dumps(
+                    {
+                        "hypothesisId": "A",
+                        "location": "akshare_utils.py:24",
+                        "message": "get_stock_info_entry",
+                        "data": {"symbol": symbol},
+                        "timestamp": int(datetime.datetime.now().timestamp() * 1000),
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+            # endregion
+        except Exception:
+            pass
+
         # 获取股票基本信息
         stock_info = ak.stock_individual_info_em(symbol=symbol)
         
@@ -37,6 +57,24 @@ def get_stock_info(symbol: str) -> Dict[str, Any]:
         try:
             # 获取A股实时行情
             realtime_data = ak.stock_zh_a_spot_em()
+            try:
+                # region agent log
+                open("/opt/cursor/logs/debug.log", "a", encoding="utf-8").write(
+                    json.dumps(
+                        {
+                            "hypothesisId": "A",
+                            "location": "akshare_utils.py:39",
+                            "message": "stock_zh_a_spot_em_fetched",
+                            "data": {"symbol": symbol, "rows": int(len(realtime_data))},
+                            "timestamp": int(datetime.datetime.now().timestamp() * 1000),
+                        },
+                        ensure_ascii=False,
+                    )
+                    + "\n"
+                )
+                # endregion
+            except Exception:
+                pass
             
             # 只在调试时输出列名
             # print(f"实时行情数据列: {realtime_data.columns.tolist()}")
@@ -517,14 +555,53 @@ def get_stock_industry_constituents(industry_code: str) -> pd.DataFrame:
             df[col] = df[col].astype(dtype)
             
         # 如果市盈率列为空，尝试获取个股数据
+        nan_pe_count = int(df['市盈率'].isna().sum()) if '市盈率' in df.columns else 0
+        try:
+            # region agent log
+            open("/opt/cursor/logs/debug.log", "a", encoding="utf-8").write(
+                json.dumps(
+                    {
+                        "hypothesisId": "C",
+                        "location": "akshare_utils.py:520",
+                        "message": "industry_constituents_pre_pe_backfill",
+                        "data": {"industry_code": industry_code, "rows": int(len(df)), "nan_pe_count": nan_pe_count},
+                        "timestamp": int(datetime.datetime.now().timestamp() * 1000),
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+            # endregion
+        except Exception:
+            pass
+        indicator_calls = 0
         if '市盈率' in df.columns and df['市盈率'].isna().any():
             for idx, row in df.iterrows():
                 try:
+                    indicator_calls += 1
                     stock_info = ak.stock_a_lg_indicator(symbol=row['代码'])
                     if not stock_info.empty and '市盈率' in stock_info.columns:
                         df.at[idx, '市盈率'] = stock_info['市盈率'].iloc[0]
                 except:
                     df.at[idx, '市盈率'] = 0.0
+        try:
+            # region agent log
+            open("/opt/cursor/logs/debug.log", "a", encoding="utf-8").write(
+                json.dumps(
+                    {
+                        "hypothesisId": "C",
+                        "location": "akshare_utils.py:531",
+                        "message": "industry_constituents_post_pe_backfill",
+                        "data": {"industry_code": industry_code, "indicator_calls": indicator_calls},
+                        "timestamp": int(datetime.datetime.now().timestamp() * 1000),
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+            # endregion
+        except Exception:
+            pass
                     
         # 选择需要的列
         df = df[list(required_columns.keys())]

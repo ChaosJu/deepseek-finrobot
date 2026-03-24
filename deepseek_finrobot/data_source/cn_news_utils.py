@@ -6,6 +6,7 @@ import akshare as ak
 import pandas as pd
 from typing import Dict, List, Optional, Union, Any
 import datetime
+import json
 import re
 import requests
 from bs4 import BeautifulSoup
@@ -312,6 +313,25 @@ def get_stock_market_sentiment() -> Dict[str, Any]:
         股市情绪指标字典
     """
     try:
+        try:
+            # region agent log
+            open("/opt/cursor/logs/debug.log", "a", encoding="utf-8").write(
+                json.dumps(
+                    {
+                        "hypothesisId": "B",
+                        "location": "cn_news_utils.py:314",
+                        "message": "get_stock_market_sentiment_entry",
+                        "data": {},
+                        "timestamp": int(datetime.datetime.now().timestamp() * 1000),
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+            # endregion
+        except Exception:
+            pass
+
         result = {}
         api_success = False  # 标记是否有API调用成功
         
@@ -395,6 +415,9 @@ def get_stock_market_sentiment() -> Dict[str, Any]:
         try:
             north_data = None
             api_found = False
+            north_api_attempts = 0
+            north_api_failures = 0
+            north_selected_api = None
             
             # 尝试所有可能的北向资金API
             possible_apis = [
@@ -428,6 +451,7 @@ def get_stock_market_sentiment() -> Dict[str, Any]:
             ]
             
             for api_name, api_params in possible_apis:
+                north_api_attempts += 1
                 try:
                     api_func = getattr(ak, api_name, None)
                     if api_func:
@@ -435,13 +459,38 @@ def get_stock_market_sentiment() -> Dict[str, Any]:
                         north_data = api_func(**api_params)
                         if not north_data.empty:
                             api_found = True
+                            north_selected_api = api_name
                             print(f"成功获取北向资金数据，使用API: {api_name}")
                             # 打印列名以便调试
                             print(f"北向资金数据列名: {north_data.columns.tolist()}")
                             break
                 except Exception as api_e:
+                    north_api_failures += 1
                     print(f"尝试API {api_name} 失败: {api_e}")
                     continue
+            try:
+                # region agent log
+                open("/opt/cursor/logs/debug.log", "a", encoding="utf-8").write(
+                    json.dumps(
+                        {
+                            "hypothesisId": "B",
+                            "location": "cn_news_utils.py:430",
+                            "message": "north_flow_api_attempt_summary",
+                            "data": {
+                                "attempts": north_api_attempts,
+                                "failures": north_api_failures,
+                                "api_found": api_found,
+                                "selected_api": north_selected_api,
+                            },
+                            "timestamp": int(datetime.datetime.now().timestamp() * 1000),
+                        },
+                        ensure_ascii=False,
+                    )
+                    + "\n"
+                )
+                # endregion
+            except Exception:
+                pass
                 
             if api_found and not north_data.empty:
                 # 确定关键列
