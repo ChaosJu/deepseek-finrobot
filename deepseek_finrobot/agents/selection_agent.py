@@ -342,7 +342,12 @@ class StockSelectorAgent:
 
         metrics = []
         for symbol in unique_symbols:
-            m = self._collect_symbol_metrics(symbol)
+            try:
+                m = self._collect_symbol_metrics(symbol)
+            except Exception as e:
+                # 单个标的网络抖动不应导致整轮选股失败
+                print(f"采集股票 {symbol} 指标失败，已跳过: {e}")
+                m = None
             if m:
                 metrics.append(m)
             try:

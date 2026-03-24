@@ -9,8 +9,38 @@ import datetime
 import json
 import os
 import re
+import time
 import requests
 from bs4 import BeautifulSoup
+
+
+_SENTIMENT_CACHE: Dict[str, Any] = {"timestamp": 0.0, "data": None}
+
+
+def _is_retryable_network_error(error: Exception) -> bool:
+    text = str(error)
+    retry_signals = (
+        "RemoteDisconnected",
+        "Connection aborted",
+        "Read timed out",
+        "ConnectTimeout",
+        "ConnectionResetError",
+        "Max retries exceeded",
+    )
+    return any(signal in text for signal in retry_signals)
+
+
+def _call_with_retry(func, max_retries: int = 2, base_delay: float = 0.8, **kwargs):
+    last_error = None
+    for attempt in range(max_retries + 1):
+        try:
+            return func(**kwargs)
+        except Exception as error:
+            last_error = error
+            if attempt >= max_retries or not _is_retryable_network_error(error):
+                raise
+            time.sleep(base_delay * (2**attempt))
+    raise last_error
 
 def get_financial_news(limit: int = 20) -> pd.DataFrame:
     """
@@ -314,6 +344,12 @@ def get_stock_market_sentiment() -> Dict[str, Any]:
         股市情绪指标字典
     """
     try:
+        cache_ttl_seconds = 120
+        cached_data = _SENTIMENT_CACHE.get("data")
+        cached_ts = float(_SENTIMENT_CACHE.get("timestamp", 0.0))
+        if isinstance(cached_data, dict) and (time.time() - cached_ts) < cache_ttl_seconds:
+            return dict(cached_data)
+
         try:
             # region agent log
             os.makedirs("/opt/cursor/logs", exist_ok=True)
@@ -343,10 +379,10 @@ def get_stock_market_sentiment() -> Dict[str, Any]:
             # 直接获取上证指数实时行情，避免日期索引问题
             try:
                 # 尝试使用新的API名称
-                df_sh_spot = ak.stock_zh_index_spot_sina()
+                df_sh_spot = _call_with_retry(ak.stock_zh_index_spot_sina, max_retries=1, base_delay=0.6)
             except AttributeError:
                 # 如果不存在，尝试旧的API名称 (兼容旧版本)
-                df_sh_spot = ak.stock_zh_index_spot()
+                df_sh_spot = _call_with_retry(ak.stock_zh_index_spot, max_retries=1, base_delay=0.6)
                 
             # 筛选上证指数
             df_sh_spot = df_sh_spot[df_sh_spot['名称'] == '上证指数']
@@ -373,10 +409,10 @@ def get_stock_market_sentiment() -> Dict[str, Any]:
             try:
                 # 尝试使用新的API名称
                 try:
-                    df_hs300 = ak.stock_zh_index_spot_sina()
+                        df_hs300 = _call_with_retry(ak.stock_zh_index_spot_sina, max_retries=1, base_delay=0.6)
                 except AttributeError:
                     # 如果不存在，尝试旧的API名称
-                    df_hs300 = ak.stock_zh_index_spot()
+                        df_hs300 = _call_with_retry(ak.stock_zh_index_spot, max_retries=1, base_delay=0.6)
                     
                 df_hs300 = df_hs300[df_hs300['名称'] == '沪深300']
                 
@@ -413,7 +449,7 @@ def get_stock_market_sentiment() -> Dict[str, Any]:
                     'sentiment': '中性'
                 }
         
-        # 获取市场资金流向数据 - 尝试多种可能的API
+        # 获取市场资金流向数据 - 优先稳定接口，减少无效尝试
         try:
             north_data = None
             api_found = False
@@ -421,44 +457,21 @@ def get_stock_market_sentiment() -> Dict[str, Any]:
             north_api_failures = 0
             north_selected_api = None
             
-            # 尝试所有可能的北向资金API
+            # 优先已验证可用接口，避免在大量候选API中“试错风暴”
             possible_apis = [
-                # 尝试各种可能的函数名
-                ('stock_em_hsgt_north_net_flow_in_hist', {}),  
+                ("stock_hsgt_hist_em", {}),
+                ("stock_em_hsgt_north_net_flow_in_hist", {}),
                 ('stock_em_hsgt_north_net_flow_in', {}),
-                ('stock_em_hsgt_hist', {}),
-                ('stock_em_hsgt_capital_flow', {}),
-                ('stock_em_hsgt_board_flow_summary', {}),
-                ('stock_hsgt_fund_flow_summary', {}),
-                ('stock_hsgt_north_net_flow_in', {}),
-                ('stock_hsgt_north_acc_flow_in', {}),
-                ('stock_hsgt_summary', {}),
-                # 尝试获取沪深港通资金流向
-                ('stock_em_hsgt_hist_em', {'symbol': 'southbound'}),
-                ('stock_em_hsgt_fund_flow_summary', {}),
-                # 根据更新日志添加的新API名称
-                ('stock_hk_ggt_components_em', {}),
-                ('stock_hsgt_hist_em', {}),
-                ('stock_hsgt_board_sem', {}),
-                ('stock_hsgt_north_flow_em', {}),
-                ('stock_hsgt_south_flow_em', {}),
-                ('stock_hsgt_north_net_flow_em', {}),
-                ('stock_hsgt_south_net_flow_em', {}),
-                ('stock_hsgt_hold_stock_em', {}),
-                ('stock_hsgt_institution_statistics_em', {}),
-                ('stock_hsgt_stock_statistics_em', {}),
-                ('stock_hsgt_stock_statistics_hist_em', {}),
-                # 最简单的应急方案 - 从东财获取实时资金流数据
-                ('stock_fund_flow_individual_em', {})
+                ("stock_hsgt_north_net_flow_em", {}),
             ]
             
             for api_name, api_params in possible_apis:
-                north_api_attempts += 1
                 try:
                     api_func = getattr(ak, api_name, None)
                     if api_func:
+                        north_api_attempts += 1
                         print(f"尝试API: {api_name}")
-                        north_data = api_func(**api_params)
+                        north_data = _call_with_retry(api_func, max_retries=1, base_delay=0.6, **api_params)
                         if not north_data.empty:
                             api_found = True
                             north_selected_api = api_name
@@ -529,6 +542,8 @@ def get_stock_market_sentiment() -> Dict[str, Any]:
                             flow_value = float(flow_value.replace(',', '').replace('亿', ''))
                         else:
                             flow_value = float(flow_value)
+                        if pd.isna(flow_value):
+                            raise ValueError("北向资金数值为NaN")
                             
                         result["north_flow"] = {
                             "date": str(north_data.iloc[-1][date_col]),
@@ -566,7 +581,7 @@ def get_stock_market_sentiment() -> Dict[str, Any]:
         # 获取市场活跃度数据
         try:
             try:
-                df_activity = ak.stock_market_activity_legu()
+                df_activity = _call_with_retry(ak.stock_market_activity_legu, max_retries=1, base_delay=0.6)
                 if not df_activity.empty:
                     result["market_activity"] = df_activity.iloc[-1].to_dict()
                     print("市场活跃度数据获取成功")
@@ -577,7 +592,9 @@ def get_stock_market_sentiment() -> Dict[str, Any]:
                 print(f"获取市场活跃度数据出错(乐股): {act_e}")
                 # 尝试替代方法 - 使用东财沪深京A股成交量作为活跃度指标
                 try:
-                    df_volume = ak.stock_zh_a_spot_em()
+                    from . import akshare_utils
+
+                    df_volume = akshare_utils.get_stock_realtime_snapshot(ttl_seconds=30)
                     if not df_volume.empty:
                         # 计算总成交量和总成交额
                         total_volume = df_volume['成交量'].sum() if '成交量' in df_volume.columns else 0
@@ -641,6 +658,8 @@ def get_stock_market_sentiment() -> Dict[str, Any]:
             }
             print("合成市场情绪数据创建成功")
         
+        _SENTIMENT_CACHE["timestamp"] = time.time()
+        _SENTIMENT_CACHE["data"] = dict(result)
         return result
     except Exception as e:
         print(f"获取股市情绪指标时出错: {str(e)}")
